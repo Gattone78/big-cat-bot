@@ -1,0 +1,21 @@
+{
+  "name": "housebot-bench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 1 bench: Gemini Live API + webcam/mic + one Home Assistant tool",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "lights": "node src/ha.js",
+    "face": "node src/face-demo.js",
+    "beep": "node src/beep.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "face-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "face", "--prefix", "big-cat-bench"],
+      "port": 8787
+    }
+  ]
+}

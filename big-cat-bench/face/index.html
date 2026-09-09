@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>housebot</title>
+<style>
+  :root {
+    --bg: #0a0f1a;          /* deep night blue — a screen that reads as "off" */
+    --ink: #f2e8d5;         /* warm bone white for captions */
+    --listen: #8fdcd2;      /* aqua tint while listening */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: var(--bg); overflow: hidden; cursor: none; }
+  body {
+    display: grid; place-items: center;
+    font: 500 3.2vmin/1.3 "Nunito", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+  }
+
+  .head {
+    width: 82vmin;
+    transform: translate(calc(var(--dx, 0vmin) * 0.5), calc(var(--dy, 0vmin) * 0.5)) scale(var(--breath, 1));
+    transition: transform 900ms cubic-bezier(.2,.8,.2,1);
+  }
+  .head svg { display: block; width: 100%; height: auto; transition: filter 600ms ease; }
+
+  /* every animated SVG part transforms in its own box */
+  .ear, .eye, .gaze, .pupil, .jaw { transform-box: fill-box; }
+
+  .ear { transform-origin: 50% 95%; transition: transform 450ms cubic-bezier(.2,.8,.2,1); }
+
+  /* blink + lids: JS sets --lid inline on .head, state rules override per-eye */
+  .eye { transform-origin: 50% 55%; transform: scaleY(var(--lid, 1)); transition: transform 140ms ease-out; }
+
+  /* the gaze follows a fraction of the head glance so the eyes lead the movement */
+  .gaze {
+    transform: translate(calc(var(--dx, 0vmin) * 0.28), calc(var(--dy, 0vmin) * 0.45));
+    transition: transform 500ms cubic-bezier(.2,.8,.2,1);
+  }
+  .pupil { transform-origin: 50% 50%; transition: transform 400ms ease; }
+
+  /* jaw: JS drives --open in vmin (0.8 = closed), scaled down into user units */
+  .jaw {
+    transform: translateY(calc((var(--open, 0.8vmin) - 0.8vmin) * 0.55));
+    transition: transform 70ms linear;
+  }
+  .iris-tint { opacity: 0; transition: opacity 500ms ease; }
+
+  /* states */
+  .listening .ear.left  { transform: rotate(-7deg); }
+  .listening .ear.right { transform: rotate(7deg); }
+  .listening .pupil     { transform: scaleX(2.2); }
+  .listening .iris-tint { opacity: .35; }
+
+  .thinking .eye   { --lid: .55; }
+  .thinking .pupil { transform: scaleX(.75); }
+  .thinking .gaze  { transform: translate(6px, -7px); }
+
+  .offline .eye { --lid: .3; }
+  .offline svg  { filter: grayscale(.65) brightness(.45); }
+
+  .caption {
+    position: fixed; left: 8vmin; right: 8vmin; bottom: 6vmin;
+    text-align: center; opacity: 0; transition: opacity 400ms ease;
+    color: var(--ink); text-wrap: balance;
+  }
+  .caption.show { opacity: .55; }
+  .unlock {
+    position: fixed; inset: 0; display: grid; place-items: end center;
+    padding-bottom: 14vmin; color: var(--ink); opacity: .5; pointer-events: none;
+  }
+  .unlock.hidden { display: none; }
+  .status {
+    position: fixed; top: 2vmin; right: 2.5vmin; font-size: 2vmin; opacity: .35; color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .head, .ear, .eye, .gaze, .pupil, .jaw, .caption { transition: none; }
+  }
+</style>
+</head>
+<body class="offline">
+  <div class="head" id="head">
+    <svg viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="big cat face">
+      <defs>
+        <radialGradient id="fur" cx="50%" cy="42%" r="72%">
+          <stop offset="0%" stop-color="#d29c60"/>
+          <stop offset="55%" stop-color="#bd8449"/>
+          <stop offset="100%" stop-color="#8a5a30"/>
+        </radialGradient>
+        <radialGradient id="iris" cx="50%" cy="45%" r="60%">
+          <stop offset="0%" stop-color="#ffd97a"/>
+          <stop offset="55%" stop-color="#eda93c"/>
+          <stop offset="100%" stop-color="#7a4a12"/>
+        </radialGradient>
+        <radialGradient id="muzzle" cx="50%" cy="35%" r="75%">
+          <stop offset="0%" stop-color="#f3e6cd"/>
+          <stop offset="100%" stop-color="#d3b284"/>
+        </radialGradient>
+        <linearGradient id="nose" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#b5766b"/>
+          <stop offset="100%" stop-color="#6f3f38"/>
+        </linearGradient>
+        <clipPath id="eyeL"><path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z"/></clipPath>
+        <clipPath id="eyeR"><path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z"/></clipPath>
+      </defs>
+
+      <!-- ears (behind head) -->
+      <g class="ear left">
+        <path d="M85,150 C68,96 76,50 108,36 C130,66 150,86 160,108 C130,114 104,128 85,150 Z" fill="#9a6636"/>
+        <path d="M96,136 C88,100 93,70 111,54 C126,74 139,88 147,102 C125,108 108,120 96,136 Z" fill="#553424"/>
+        <path d="M103,124 C99,102 102,84 113,70 C123,84 132,94 138,104 C122,109 111,115 103,124 Z" fill="#7c5140"/>
+      </g>
+      <g class="ear right">
+        <path d="M315,150 C332,96 324,50 292,36 C270,66 250,86 240,108 C270,114 296,128 315,150 Z" fill="#9a6636"/>
+        <path d="M304,136 C312,100 307,70 289,54 C274,74 261,88 253,102 C275,108 292,120 304,136 Z" fill="#553424"/>
+        <path d="M297,124 C301,102 298,84 287,70 C277,84 268,94 262,104 C278,109 289,115 297,124 Z" fill="#7c5140"/>
+      </g>
+
+      <!-- head -->
+      <ellipse cx="200" cy="218" rx="146" ry="138" fill="url(#fur)"/>
+      <!-- jowl / cheek shading -->
+      <ellipse cx="112" cy="278" rx="46" ry="52" fill="#7c4e28" opacity=".28"/>
+      <ellipse cx="288" cy="278" rx="46" ry="52" fill="#7c4e28" opacity=".28"/>
+      <!-- lighter nose bridge -->
+      <ellipse cx="200" cy="232" rx="22" ry="46" fill="#d8a468" opacity=".55"/>
+      <!-- brow shading -->
+      <ellipse cx="132" cy="176" rx="42" ry="26" fill="#7a4a22" opacity=".32"/>
+      <ellipse cx="268" cy="176" rx="42" ry="26" fill="#7a4a22" opacity=".32"/>
+      <!-- tear lines from inner eye corners toward the nose -->
+      <path d="M170,198 C176,214 182,228 188,244" stroke="#6b3f1f" stroke-width="5" stroke-linecap="round" fill="none" opacity=".4"/>
+      <path d="M230,198 C224,214 218,228 212,244" stroke="#6b3f1f" stroke-width="5" stroke-linecap="round" fill="none" opacity=".4"/>
+
+      <!-- eyes -->
+      <g class="eye left">
+        <path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z" fill="#120a04"/>
+        <g clip-path="url(#eyeL)">
+          <g class="gaze">
+            <circle cx="132" cy="191" r="27" fill="url(#iris)"/>
+            <circle class="iris-tint" cx="132" cy="191" r="27" fill="#8fdcd2"/>
+            <ellipse class="pupil" cx="132" cy="191" rx="6.5" ry="20" fill="#0b0603"/>
+            <circle cx="122" cy="181" r="5.5" fill="#fff" opacity=".85"/>
+            <circle cx="141" cy="200" r="2.4" fill="#fff" opacity=".5"/>
+          </g>
+        </g>
+        <path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z"
+              fill="none" stroke="#1d0f05" stroke-width="4.5" stroke-linejoin="round"/>
+      </g>
+      <g class="eye right">
+        <path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z" fill="#120a04"/>
+        <g clip-path="url(#eyeR)">
+          <g class="gaze">
+            <circle cx="268" cy="191" r="27" fill="url(#iris)"/>
+            <circle class="iris-tint" cx="268" cy="191" r="27" fill="#8fdcd2"/>
+            <ellipse class="pupil" cx="268" cy="191" rx="6.5" ry="20" fill="#0b0603"/>
+            <circle cx="258" cy="181" r="5.5" fill="#fff" opacity=".85"/>
+            <circle cx="277" cy="200" r="2.4" fill="#fff" opacity=".5"/>
+          </g>
+        </g>
+        <path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z"
+              fill="none" stroke="#1d0f05" stroke-width="4.5" stroke-linejoin="round"/>
+      </g>
+
+      <!-- inner mouth, revealed as the jaw drops -->
+      <g>
+        <ellipse cx="200" cy="300" rx="28" ry="22" fill="#3d1013"/>
+        <ellipse cx="200" cy="308" rx="16" ry="12" fill="#c25b62"/>
+      </g>
+
+      <!-- lower jaw / chin (JS drives --open on this via id="mouth") -->
+      <g class="jaw" id="mouth">
+        <ellipse cx="200" cy="313" rx="44" ry="28" fill="url(#muzzle)"/>
+        <path d="M168,308 Q200,326 232,308" stroke="#8a6a48" stroke-width="3" fill="none" opacity=".45"/>
+      </g>
+
+      <!-- muzzle over the jaw seam -->
+      <ellipse cx="176" cy="276" rx="33" ry="25" fill="url(#muzzle)"/>
+      <ellipse cx="224" cy="276" rx="33" ry="25" fill="url(#muzzle)"/>
+      <!-- whisker dots -->
+      <g fill="#8a6a4a" opacity=".6">
+        <circle cx="166" cy="272" r="1.6"/><circle cx="178" cy="268" r="1.6"/><circle cx="172" cy="280" r="1.6"/>
+        <circle cx="234" cy="272" r="1.6"/><circle cx="222" cy="268" r="1.6"/><circle cx="228" cy="280" r="1.6"/>
+      </g>
+      <!-- nose -->
+      <path d="M182,248 Q200,240 218,248 Q215,266 200,273 Q185,266 182,248 Z" fill="url(#nose)"/>
+      <path d="M189,252 q3,5 6,6 M211,252 q-3,5 -6,6" stroke="#4a2521" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <!-- philtrum + closed-mouth line -->
+      <path d="M200,273 L200,288" stroke="#3a2415" stroke-width="3" stroke-linecap="round"/>
+      <path d="M200,288 Q186,298 168,291 M200,288 Q214,298 232,291" stroke="#3a2415" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+      <!-- whiskers -->
+      <g stroke="#ecdfc2" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".7">
+        <path d="M152,266 Q100,254 58,244"/>
+        <path d="M150,276 Q96,276 52,278"/>
+        <path d="M152,286 Q100,296 62,308"/>
+        <path d="M248,266 Q300,254 342,244"/>
+        <path d="M250,276 Q304,276 348,278"/>
+        <path d="M248,286 Q300,296 338,308"/>
+      </g>
+    </svg>
+  </div>
+  <div class="caption" id="caption"></div>
+  <div class="unlock" id="unlock">click or tap once to turn on sound</div>
+  <div class="status" id="status">sound off</div>
+
+<script>
+(() => {
+  const body = document.body;
+  const head = document.getElementById('head');
+  const mouth = document.getElementById('mouth');
+  const caption = document.getElementById('caption');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let state = 'offline';
+  let captionTimer = null;
+
+  // ---- audio out: 24 kHz s16le PCM arrives as binary WebSocket frames ---------
+  const SAMPLE_RATE = 24000;
+  let ctx = null, nextTime = 0, sources = [];
+  const unlockEl = document.getElementById('unlock');
+  const statusEl = document.getElementById('status');
+  let receivedSec = 0;
+  function showStatus() {
+    statusEl.textContent = ctx
+      ? `sound ${ctx.state} · ${receivedSec.toFixed(1)}s received`
+      : `sound off · ${receivedSec.toFixed(1)}s received`;
+  }
+
+  function unlockAudio() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    ctx.resume().then(showStatus);
+    ctx.onstatechange = showStatus;
+    unlockEl.classList.add('hidden');
+    showStatus();
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach((ev) => addEventListener(ev, unlockAudio, { once: false }));
+
+  function playPcm(arrayBuf) {
+    const i16 = new Int16Array(arrayBuf);
+    receivedSec += i16.length / SAMPLE_RATE;
+    showStatus();
+    if (!ctx) return; // not unlocked yet
+    const f32 = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+    const buf = ctx.createBuffer(1, f32.length, SAMPLE_RATE);
+    buf.copyToChannel(f32, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    const startAt = Math.max(ctx.currentTime + 0.02, nextTime);
+    src.start(startAt);
+    nextTime = startAt + buf.duration;
+    sources.push(src);
+    src.onended = () => { sources = sources.filter((s) => s !== src); };
+  }
+
+  function flushAudio() {
+    for (const s of sources) { try { s.stop(); } catch {} }
+    sources = [];
+    nextTime = 0;
+  }
+
+  function setState(next) {
+    if (next === state) return;
+    state = next;
+    body.className = next;
+    if (next !== 'speaking') mouth.style.setProperty('--open', '0.8vmin');
+    if (next === 'thinking') head.style.setProperty('--dx', '2vmin'), head.style.setProperty('--dy', '-2vmin');
+    else if (next === 'listening') head.style.setProperty('--dx', '0'), head.style.setProperty('--dy', '1vmin');
+    else head.style.setProperty('--dx', '0'), head.style.setProperty('--dy', '0');
+  }
+
+  function setLevel(level) {
+    if (state !== 'speaking') return;
+    const open = 0.8 + level * 7; // vmin
+    mouth.style.setProperty('--open', open.toFixed(2) + 'vmin');
+  }
+
+  function setCaption(text) {
+    caption.textContent = text;
+    caption.classList.add('show');
+    clearTimeout(captionTimer);
+    captionTimer = setTimeout(() => caption.classList.remove('show'), 4000);
+  }
+
+  // ---- liveliness: blinks, glances, breathing --------------------------------
+  function blink() {
+    if (state === 'offline' || state === 'thinking') return;
+    head.style.setProperty('--lid', '0.08');
+    setTimeout(() => head.style.setProperty('--lid', ''), 130);
+  }
+  (function blinkLoop() {
+    setTimeout(() => { blink(); blinkLoop(); }, 2500 + Math.random() * 4000);
+  })();
+
+  if (!reduced) {
+    (function glanceLoop() {
+      setTimeout(() => {
+        if (state === 'idle') {
+          const dx = (Math.random() - 0.5) * 6, dy = (Math.random() - 0.5) * 3;
+          head.style.setProperty('--dx', dx + 'vmin');
+          head.style.setProperty('--dy', dy + 'vmin');
+          setTimeout(() => { if (state === 'idle') { head.style.setProperty('--dx', '0'); head.style.setProperty('--dy', '0'); } }, 1400);
+        }
+        glanceLoop();
+      }, 4000 + Math.random() * 6000);
+    })();
+
+    let t = 0;
+    (function breathe() {
+      t += 0.02;
+      head.style.setProperty('--breath', (1 + Math.sin(t) * 0.012).toFixed(4));
+      requestAnimationFrame(breathe);
+    })();
+  }
+
+  // ---- transport ---------------------------------------------------------------
+  function connect() {
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => setState('idle');
+    ws.onclose = () => { setState('offline'); setTimeout(connect, 1500); };
+    ws.onmessage = (ev) => {
+      if (ev.data instanceof ArrayBuffer) { playPcm(ev.data); return; }
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'flush') flushAudio();
+      else if (msg.type === 'state') setState(msg.state);
+      else if (msg.type === 'level') setLevel(msg.level);
+      else if (msg.type === 'caption' && msg.role === 'bot') setCaption(msg.text);
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
