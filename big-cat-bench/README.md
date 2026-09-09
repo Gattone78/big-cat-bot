@@ -48,7 +48,13 @@ browser (full-screen it with F11). States: idle (blinks, glances), listening
 (aqua, leans in), thinking (squints, during a tool call), speaking (mouth follows
 the audio), offline (dim). The bot's words appear as a caption while it speaks.
 
-Try `npm run face` first to see it cycle through states without any keys.
+The face morphs between personas to match the topic — the model picks one with
+the `set_face` tool: `pepper` (default friendly robot), `hal9000` (red camera
+eye — space/AI), `terminator` (chrome skull — security/action), `r2d2`
+(astromech dome — Star Wars/tinkering). Each persona maps the same states onto
+its own anatomy (HAL's glow breathes, the skull's jaw talks, R2's lights flicker).
+
+Try `npm run face` first to see it cycle through states and faces without any keys.
 
 Later this same page runs in Chromium kiosk mode on the Pi's display:
 `chromium --kiosk --noerrdialogs http://brain.lan:8787`

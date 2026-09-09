@@ -7,9 +7,11 @@ const script = [
   ['idle', 4000], ['listening', 2500], ['thinking', 1500],
   ['speaking', 4000], ['idle', 3000],
 ];
+const faces = ['pepper', 'hal9000', 'terminator', 'r2d2'];
 
 let i = 0;
 (function step() {
+  if (i % script.length === 0) face.setFace(faces[(i / script.length) % faces.length]);
   const [state, ms] = script[i++ % script.length];
   face.state(state);
   if (state === 'speaking') {

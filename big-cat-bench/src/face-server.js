@@ -21,9 +21,11 @@ export function startFaceServer(port = Number(process.env.FACE_PORT ?? 8787)) {
 
   const wss = new WebSocketServer({ server });
   let last = { type: 'state', state: 'idle' };
+  let lastFace = null;
 
   wss.on('connection', (ws) => {
     ws.send(JSON.stringify(last)); // late joiners get the current state
+    if (lastFace) ws.send(JSON.stringify(lastFace)); // ...and the current face
   });
 
   server.listen(port, () => {
@@ -32,6 +34,7 @@ export function startFaceServer(port = Number(process.env.FACE_PORT ?? 8787)) {
 
   function broadcast(msg) {
     if (msg.type === 'state') last = msg;
+    if (msg.type === 'face') lastFace = msg;
     send(JSON.stringify(msg));
   }
   function send(data) {
@@ -44,6 +47,8 @@ export function startFaceServer(port = Number(process.env.FACE_PORT ?? 8787)) {
     state: (state) => broadcast({ type: 'state', state }),
     level: (level) => broadcast({ type: 'level', level }),
     caption: (role, text) => broadcast({ type: 'caption', role, text }),
+    /** 'pepper' (default) | 'hal9000' | 'terminator' | 'r2d2' */
+    setFace: (name) => broadcast({ type: 'face', face: name }),
     /** Raw 24 kHz s16le PCM; sent as a binary frame, played by the page. */
     audio: (pcm) => send(pcm),
     /** Drop anything the page has queued (interruption). */

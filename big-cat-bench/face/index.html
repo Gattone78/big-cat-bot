@@ -8,7 +8,7 @@
   :root {
     --bg: #0a0f1a;          /* deep night blue — a screen that reads as "off" */
     --ink: #f2e8d5;         /* warm bone white for captions */
-    --listen: #8fdcd2;      /* aqua tint while listening */
+    --listen: #8fdcd2;      /* aqua accent while listening */
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: var(--bg); overflow: hidden; cursor: none; }
@@ -19,46 +19,73 @@
   }
 
   .head {
-    width: 82vmin;
+    width: 82vmin; display: grid;
     transform: translate(calc(var(--dx, 0vmin) * 0.5), calc(var(--dy, 0vmin) * 0.5)) scale(var(--breath, 1));
-    transition: transform 900ms cubic-bezier(.2,.8,.2,1);
+    transition: transform 900ms cubic-bezier(.2,.8,.2,1), filter 600ms ease;
   }
-  .head svg { display: block; width: 100%; height: auto; transition: filter 600ms ease; }
+  .offline .head { filter: grayscale(.65) brightness(.45); }
 
-  /* every animated SVG part transforms in its own box */
-  .ear, .eye, .gaze, .pupil, .jaw { transform-box: fill-box; }
+  /* four faces stacked in one cell; data-face on <body> picks the visible one */
+  .face {
+    grid-area: 1 / 1; width: 100%; height: auto;
+    opacity: 0; transform: scale(.72); filter: blur(8px); pointer-events: none;
+    transition: opacity 500ms ease, transform 650ms cubic-bezier(.2,.8,.2,1), filter 500ms ease;
+  }
+  [data-face="pepper"]     .face.pepper,
+  [data-face="hal9000"]    .face.hal9000,
+  [data-face="terminator"] .face.terminator,
+  [data-face="r2d2"]       .face.r2d2 { opacity: 1; transform: none; filter: none; }
 
-  .ear { transform-origin: 50% 95%; transition: transform 450ms cubic-bezier(.2,.8,.2,1); }
-
-  /* blink + lids: JS sets --lid inline on .head, state rules override per-eye */
-  .eye { transform-origin: 50% 55%; transform: scaleY(var(--lid, 1)); transition: transform 140ms ease-out; }
-
-  /* the gaze follows a fraction of the head glance so the eyes lead the movement */
+  /* shared animation plumbing: JS sets --lid/--dx/--dy/--breath/--open/--talk on .head */
+  .lid, .gaze, .jaw, .mouth-open { transform-box: fill-box; transform-origin: 50% 50%; }
+  .lid  { transform: scaleY(var(--lid, 1)); transition: transform 140ms ease-out; }
   .gaze {
     transform: translate(calc(var(--dx, 0vmin) * 0.28), calc(var(--dy, 0vmin) * 0.45));
     transition: transform 500ms cubic-bezier(.2,.8,.2,1);
   }
-  .pupil { transform-origin: 50% 50%; transition: transform 400ms ease; }
-
-  /* jaw: JS drives --open in vmin (0.8 = closed), scaled down into user units */
   .jaw {
     transform: translateY(calc((var(--open, 0.8vmin) - 0.8vmin) * 0.55));
     transition: transform 70ms linear;
   }
-  .iris-tint { opacity: 0; transition: opacity 500ms ease; }
+  .glow, .blip { transition: opacity 120ms linear; }
 
-  /* states */
-  .listening .ear.left  { transform: rotate(-7deg); }
-  .listening .ear.right { transform: rotate(7deg); }
-  .listening .pupil     { transform: scaleX(2.2); }
-  .listening .iris-tint { opacity: .35; }
+  /* ---- pepper ---------------------------------------------------------- */
+  .pepper .ring  { stroke: #59b7ff; opacity: .8; transition: stroke 400ms ease, opacity 400ms ease; }
+  .pepper .halo  { stroke: #59b7ff; opacity: .22; transition: stroke 400ms ease, opacity 400ms ease; }
+  .pepper .mouth-open { transform: scaleY(calc(.25 + var(--talk, 0) * 1.6)); transition: transform 70ms linear; }
+  .listening .pepper .ring { stroke: var(--listen); opacity: 1; }
+  .listening .pepper .halo { stroke: var(--listen); opacity: .4; }
+  .thinking  .pepper .lid  { --lid: .55; }
+  .thinking  .pepper .ring, .thinking .pepper .halo { animation: pulse 1.1s ease-in-out infinite; }
+  .offline   .pepper .ring, .offline  .pepper .halo { opacity: .08; }
 
-  .thinking .eye   { --lid: .55; }
-  .thinking .pupil { transform: scaleX(.75); }
-  .thinking .gaze  { transform: translate(6px, -7px); }
+  /* ---- hal9000 --------------------------------------------------------- */
+  .hal9000 .glow { opacity: .35; animation: pulse 4s ease-in-out infinite; }
+  .listening .hal9000 .glow { opacity: .6; animation: none; }
+  .thinking  .hal9000 .glow { animation: pulse 1s ease-in-out infinite; }
+  .speaking  .hal9000 .glow { opacity: calc(.3 + var(--talk, 0) * .7); animation: none; }
+  .offline   .hal9000 .glow { opacity: .05; animation: none; }
 
-  .offline .eye { --lid: .3; }
-  .offline svg  { filter: grayscale(.65) brightness(.45); }
+  /* ---- terminator ------------------------------------------------------ */
+  .terminator .eyeglow { opacity: .55; }
+  .listening .terminator .eyeglow { opacity: .95; }
+  .thinking  .terminator .eyeglow { animation: pulse 1s ease-in-out infinite; }
+  .speaking  .terminator .eyeglow { opacity: calc(.5 + var(--talk, 0) * .5); }
+  .offline   .terminator .eyeglow, .offline .terminator .eyecore { opacity: .06; }
+
+  /* ---- r2d2 ------------------------------------------------------------ */
+  .r2d2 .r2glow { opacity: .3; }
+  .r2d2 .blip   { opacity: .35; }
+  .listening .r2d2 .r2glow { opacity: .8; }
+  .listening .r2d2 .blip   { opacity: .9; }
+  .thinking  .r2d2 .blip   { animation: pulse .8s ease-in-out infinite; }
+  .thinking  .r2d2 .blip:nth-child(2n) { animation-delay: .4s; }
+  .speaking  .r2d2 .r2glow { opacity: calc(.25 + var(--talk, 0) * .75); }
+  .speaking  .r2d2 .blip   { opacity: calc(.2 + var(--talk, 0) * .8); }
+  .speaking  .r2d2 .blip:nth-child(2n) { opacity: calc(.9 - var(--talk, 0) * .7); }
+  .offline   .r2d2 .r2glow, .offline .r2d2 .blip, .offline .r2d2 .holo { opacity: .06; }
+
+  @keyframes pulse { 50% { opacity: .25; } }
 
   .caption {
     position: fixed; left: 8vmin; right: 8vmin; bottom: 6vmin;
@@ -76,129 +103,221 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .head, .ear, .eye, .gaze, .pupil, .jaw, .caption { transition: none; }
+    .head, .face, .lid, .gaze, .jaw, .mouth-open, .caption { transition: none; }
+    .glow, .ring, .halo, .blip, .eyeglow { animation: none !important; }
   }
 </style>
 </head>
-<body class="offline">
+<body class="offline" data-face="pepper">
   <div class="head" id="head">
-    <svg viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="big cat face">
+
+    <!-- ================= pepper (default) ================= -->
+    <svg class="face pepper" viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="friendly robot face">
       <defs>
-        <radialGradient id="fur" cx="50%" cy="42%" r="72%">
-          <stop offset="0%" stop-color="#d29c60"/>
-          <stop offset="55%" stop-color="#bd8449"/>
-          <stop offset="100%" stop-color="#8a5a30"/>
+        <radialGradient id="pep-head" cx="42%" cy="32%" r="80%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="60%" stop-color="#eef1f5"/>
+          <stop offset="100%" stop-color="#c3cad4"/>
         </radialGradient>
-        <radialGradient id="iris" cx="50%" cy="45%" r="60%">
-          <stop offset="0%" stop-color="#ffd97a"/>
-          <stop offset="55%" stop-color="#eda93c"/>
-          <stop offset="100%" stop-color="#7a4a12"/>
+        <radialGradient id="pep-eye" cx="38%" cy="32%" r="80%">
+          <stop offset="0%" stop-color="#2a3442"/>
+          <stop offset="60%" stop-color="#0f151d"/>
+          <stop offset="100%" stop-color="#05080c"/>
         </radialGradient>
-        <radialGradient id="muzzle" cx="50%" cy="35%" r="75%">
-          <stop offset="0%" stop-color="#f3e6cd"/>
-          <stop offset="100%" stop-color="#d3b284"/>
-        </radialGradient>
-        <linearGradient id="nose" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#b5766b"/>
-          <stop offset="100%" stop-color="#6f3f38"/>
-        </linearGradient>
-        <clipPath id="eyeL"><path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z"/></clipPath>
-        <clipPath id="eyeR"><path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z"/></clipPath>
       </defs>
-
-      <!-- ears (behind head) -->
-      <g class="ear left">
-        <path d="M85,150 C68,96 76,50 108,36 C130,66 150,86 160,108 C130,114 104,128 85,150 Z" fill="#9a6636"/>
-        <path d="M96,136 C88,100 93,70 111,54 C126,74 139,88 147,102 C125,108 108,120 96,136 Z" fill="#553424"/>
-        <path d="M103,124 C99,102 102,84 113,70 C123,84 132,94 138,104 C122,109 111,115 103,124 Z" fill="#7c5140"/>
+      <!-- side speakers -->
+      <g fill="#c9cfd8" stroke="#9aa2ad" stroke-width="3">
+        <circle cx="60" cy="200" r="26"/><circle cx="340" cy="200" r="26"/>
       </g>
-      <g class="ear right">
-        <path d="M315,150 C332,96 324,50 292,36 C270,66 250,86 240,108 C270,114 296,128 315,150 Z" fill="#9a6636"/>
-        <path d="M304,136 C312,100 307,70 289,54 C274,74 261,88 253,102 C275,108 292,120 304,136 Z" fill="#553424"/>
-        <path d="M297,124 C301,102 298,84 287,70 C277,84 268,94 262,104 C278,109 289,115 297,124 Z" fill="#7c5140"/>
+      <g fill="none" stroke="#8d95a1" stroke-width="2.5">
+        <circle cx="60" cy="200" r="15"/><circle cx="60" cy="200" r="6"/>
+        <circle cx="340" cy="200" r="15"/><circle cx="340" cy="200" r="6"/>
       </g>
-
       <!-- head -->
-      <ellipse cx="200" cy="218" rx="146" ry="138" fill="url(#fur)"/>
-      <!-- jowl / cheek shading -->
-      <ellipse cx="112" cy="278" rx="46" ry="52" fill="#7c4e28" opacity=".28"/>
-      <ellipse cx="288" cy="278" rx="46" ry="52" fill="#7c4e28" opacity=".28"/>
-      <!-- lighter nose bridge -->
-      <ellipse cx="200" cy="232" rx="22" ry="46" fill="#d8a468" opacity=".55"/>
-      <!-- brow shading -->
-      <ellipse cx="132" cy="176" rx="42" ry="26" fill="#7a4a22" opacity=".32"/>
-      <ellipse cx="268" cy="176" rx="42" ry="26" fill="#7a4a22" opacity=".32"/>
-      <!-- tear lines from inner eye corners toward the nose -->
-      <path d="M170,198 C176,214 182,228 188,244" stroke="#6b3f1f" stroke-width="5" stroke-linecap="round" fill="none" opacity=".4"/>
-      <path d="M230,198 C224,214 218,228 212,244" stroke="#6b3f1f" stroke-width="5" stroke-linecap="round" fill="none" opacity=".4"/>
-
+      <path d="M200,42 C288,42 336,112 332,200 C328,284 276,348 200,348 C124,348 72,284 68,200 C64,112 112,42 200,42 Z" fill="url(#pep-head)"/>
+      <path d="M200,42 C288,42 336,112 332,200 C328,284 276,348 200,348 C124,348 72,284 68,200 C64,112 112,42 200,42 Z" fill="none" stroke="#aab2bd" stroke-width="3"/>
       <!-- eyes -->
-      <g class="eye left">
-        <path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z" fill="#120a04"/>
-        <g clip-path="url(#eyeL)">
-          <g class="gaze">
-            <circle cx="132" cy="191" r="27" fill="url(#iris)"/>
-            <circle class="iris-tint" cx="132" cy="191" r="27" fill="#8fdcd2"/>
-            <ellipse class="pupil" cx="132" cy="191" rx="6.5" ry="20" fill="#0b0603"/>
-            <circle cx="122" cy="181" r="5.5" fill="#fff" opacity=".85"/>
-            <circle cx="141" cy="200" r="2.4" fill="#fff" opacity=".5"/>
-          </g>
+      <g class="lid">
+        <circle cx="140" cy="192" r="35" fill="url(#pep-eye)"/>
+        <circle class="halo" cx="140" cy="192" r="24" fill="none" stroke-width="9"/>
+        <circle class="ring" cx="140" cy="192" r="24" fill="none" stroke-width="3.5"/>
+        <g class="gaze"><circle cx="132" cy="183" r="6" fill="#dfeeff" opacity=".8"/></g>
+      </g>
+      <g class="lid">
+        <circle cx="260" cy="192" r="35" fill="url(#pep-eye)"/>
+        <circle class="halo" cx="260" cy="192" r="24" fill="none" stroke-width="9"/>
+        <circle class="ring" cx="260" cy="192" r="24" fill="none" stroke-width="3.5"/>
+        <g class="gaze"><circle cx="252" cy="183" r="6" fill="#dfeeff" opacity=".8"/></g>
+      </g>
+      <!-- mouth -->
+      <ellipse class="mouth-open" cx="200" cy="288" rx="14" ry="10" fill="#10151c"/>
+    </svg>
+
+    <!-- ================= HAL 9000 ================= -->
+    <svg class="face hal9000" viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="red camera eye">
+      <defs>
+        <linearGradient id="hal-plate" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#c2c7ce"/>
+          <stop offset="50%" stop-color="#8d939c"/>
+          <stop offset="100%" stop-color="#666c75"/>
+        </linearGradient>
+        <radialGradient id="hal-iris" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ffc790"/>
+          <stop offset="18%" stop-color="#ff4a2a"/>
+          <stop offset="55%" stop-color="#a30d00"/>
+          <stop offset="100%" stop-color="#2b0200"/>
+        </radialGradient>
+        <radialGradient id="hal-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ff3b1f"/>
+          <stop offset="100%" stop-color="#ff3b1f" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="116" y="30" width="168" height="330" rx="12" fill="url(#hal-plate)" stroke="#3c4148" stroke-width="3"/>
+      <g fill="#4d535b">
+        <circle cx="132" cy="46" r="4"/><circle cx="268" cy="46" r="4"/>
+        <circle cx="132" cy="344" r="4"/><circle cx="268" cy="344" r="4"/>
+      </g>
+      <rect x="134" y="56" width="132" height="28" rx="4" fill="#14161a"/>
+      <text x="200" y="76" text-anchor="middle" fill="#ccd2da" font-family="Eurostile, 'Segoe UI', sans-serif" font-size="16" letter-spacing="3">HAL 9000</text>
+      <rect x="134" y="96" width="132" height="248" rx="8" fill="#0a0b0d"/>
+      <!-- lens -->
+      <circle cx="200" cy="220" r="62" fill="#101115" stroke="#575e67" stroke-width="6"/>
+      <circle cx="200" cy="220" r="52" fill="#08090b" stroke="#2b2e34" stroke-width="3"/>
+      <circle cx="200" cy="220" r="44" fill="url(#hal-iris)"/>
+      <circle class="glow" cx="200" cy="220" r="58" fill="url(#hal-glow)"/>
+      <g class="gaze">
+        <circle cx="200" cy="220" r="7" fill="#ffdcae"/>
+        <circle cx="197" cy="217" r="2.5" fill="#fff"/>
+      </g>
+      <ellipse cx="182" cy="196" rx="20" ry="9" fill="#fff" opacity=".08" transform="rotate(-32 182 196)"/>
+    </svg>
+
+    <!-- ================= terminator ================= -->
+    <svg class="face terminator" viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="chrome skull">
+      <defs>
+        <linearGradient id="t-chrome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f0f3f7"/>
+          <stop offset="45%" stop-color="#aeb5bf"/>
+          <stop offset="100%" stop-color="#69707b"/>
+        </linearGradient>
+        <linearGradient id="t-chrome-dk" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#c6ccd4"/>
+          <stop offset="100%" stop-color="#565d68"/>
+        </linearGradient>
+        <linearGradient id="t-teeth" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e8ebef"/>
+          <stop offset="100%" stop-color="#8d949e"/>
+        </linearGradient>
+        <radialGradient id="t-eye" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ff2016"/>
+          <stop offset="100%" stop-color="#ff2016" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <!-- dark backplate -->
+      <ellipse cx="200" cy="190" rx="126" ry="145" fill="#08090c"/>
+      <!-- cranium -->
+      <path d="M78,185 C74,92 138,42 200,42 C262,42 326,92 322,185 C322,210 313,224 298,232 L102,232 C87,224 78,210 78,185 Z" fill="url(#t-chrome)"/>
+      <ellipse cx="158" cy="92" rx="52" ry="26" fill="#fff" opacity=".3" transform="rotate(-18 158 92)"/>
+      <!-- brow ridges -->
+      <path d="M106,166 Q145,152 182,164" stroke="#40464f" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <path d="M294,166 Q255,152 218,164" stroke="#40464f" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <!-- eye sockets + eyes -->
+      <ellipse cx="146" cy="188" rx="33" ry="24" fill="#05060a"/>
+      <ellipse cx="254" cy="188" rx="33" ry="24" fill="#05060a"/>
+      <g class="lid"><g class="gaze">
+        <circle class="eyeglow" cx="146" cy="188" r="19" fill="url(#t-eye)"/>
+        <circle class="eyecore" cx="146" cy="188" r="8" fill="#ff2016"/>
+        <circle cx="143" cy="185" r="2.5" fill="#ffd0c8"/>
+      </g></g>
+      <g class="lid"><g class="gaze">
+        <circle class="eyeglow" cx="254" cy="188" r="19" fill="url(#t-eye)"/>
+        <circle class="eyecore" cx="254" cy="188" r="8" fill="#ff2016"/>
+        <circle cx="251" cy="185" r="2.5" fill="#ffd0c8"/>
+      </g></g>
+      <!-- nasal cavity -->
+      <path d="M200,192 L188,226 L212,226 Z" fill="#05060a"/>
+      <!-- cheeks -->
+      <path d="M102,232 L148,232 L148,262 C122,262 106,250 102,232 Z" fill="url(#t-chrome-dk)"/>
+      <path d="M298,232 L252,232 L252,262 C278,262 294,250 298,232 Z" fill="url(#t-chrome-dk)"/>
+      <!-- inner mouth -->
+      <rect x="146" y="240" width="108" height="70" fill="#060708"/>
+      <!-- upper teeth -->
+      <g fill="url(#t-teeth)" stroke="#5c626c" stroke-width="1.5">
+        <rect x="150" y="240" width="11" height="30" rx="3"/><rect x="163" y="240" width="11" height="32" rx="3"/>
+        <rect x="176" y="240" width="11" height="33" rx="3"/><rect x="189" y="240" width="11" height="34" rx="3"/>
+        <rect x="200" y="240" width="11" height="34" rx="3"/><rect x="213" y="240" width="11" height="33" rx="3"/>
+        <rect x="226" y="240" width="11" height="32" rx="3"/><rect x="239" y="240" width="11" height="30" rx="3"/>
+      </g>
+      <!-- lower jaw -->
+      <g class="jaw">
+        <path d="M140,296 C142,338 168,354 200,354 C232,354 258,338 260,296 L260,284 L140,284 Z" fill="url(#t-chrome-dk)"/>
+        <g fill="url(#t-teeth)" stroke="#5c626c" stroke-width="1.5">
+          <rect x="153" y="282" width="10" height="18" rx="3"/><rect x="166" y="281" width="10" height="19" rx="3"/>
+          <rect x="179" y="280" width="10" height="20" rx="3"/><rect x="192" y="280" width="10" height="20" rx="3"/>
+          <rect x="205" y="280" width="10" height="20" rx="3"/><rect x="218" y="281" width="10" height="19" rx="3"/>
+          <rect x="231" y="282" width="10" height="18" rx="3"/>
         </g>
-        <path d="M98,192 C110,166 154,166 166,192 C154,214 110,214 98,192 Z"
-              fill="none" stroke="#1d0f05" stroke-width="4.5" stroke-linejoin="round"/>
-      </g>
-      <g class="eye right">
-        <path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z" fill="#120a04"/>
-        <g clip-path="url(#eyeR)">
-          <g class="gaze">
-            <circle cx="268" cy="191" r="27" fill="url(#iris)"/>
-            <circle class="iris-tint" cx="268" cy="191" r="27" fill="#8fdcd2"/>
-            <ellipse class="pupil" cx="268" cy="191" rx="6.5" ry="20" fill="#0b0603"/>
-            <circle cx="258" cy="181" r="5.5" fill="#fff" opacity=".85"/>
-            <circle cx="277" cy="200" r="2.4" fill="#fff" opacity=".5"/>
-          </g>
-        </g>
-        <path d="M234,192 C246,166 290,166 302,192 C290,214 246,214 234,192 Z"
-              fill="none" stroke="#1d0f05" stroke-width="4.5" stroke-linejoin="round"/>
-      </g>
-
-      <!-- inner mouth, revealed as the jaw drops -->
-      <g>
-        <ellipse cx="200" cy="300" rx="28" ry="22" fill="#3d1013"/>
-        <ellipse cx="200" cy="308" rx="16" ry="12" fill="#c25b62"/>
-      </g>
-
-      <!-- lower jaw / chin (JS drives --open on this via id="mouth") -->
-      <g class="jaw" id="mouth">
-        <ellipse cx="200" cy="313" rx="44" ry="28" fill="url(#muzzle)"/>
-        <path d="M168,308 Q200,326 232,308" stroke="#8a6a48" stroke-width="3" fill="none" opacity=".45"/>
-      </g>
-
-      <!-- muzzle over the jaw seam -->
-      <ellipse cx="176" cy="276" rx="33" ry="25" fill="url(#muzzle)"/>
-      <ellipse cx="224" cy="276" rx="33" ry="25" fill="url(#muzzle)"/>
-      <!-- whisker dots -->
-      <g fill="#8a6a4a" opacity=".6">
-        <circle cx="166" cy="272" r="1.6"/><circle cx="178" cy="268" r="1.6"/><circle cx="172" cy="280" r="1.6"/>
-        <circle cx="234" cy="272" r="1.6"/><circle cx="222" cy="268" r="1.6"/><circle cx="228" cy="280" r="1.6"/>
-      </g>
-      <!-- nose -->
-      <path d="M182,248 Q200,240 218,248 Q215,266 200,273 Q185,266 182,248 Z" fill="url(#nose)"/>
-      <path d="M189,252 q3,5 6,6 M211,252 q-3,5 -6,6" stroke="#4a2521" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-      <!-- philtrum + closed-mouth line -->
-      <path d="M200,273 L200,288" stroke="#3a2415" stroke-width="3" stroke-linecap="round"/>
-      <path d="M200,288 Q186,298 168,291 M200,288 Q214,298 232,291" stroke="#3a2415" stroke-width="3" stroke-linecap="round" fill="none"/>
-
-      <!-- whiskers -->
-      <g stroke="#ecdfc2" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".7">
-        <path d="M152,266 Q100,254 58,244"/>
-        <path d="M150,276 Q96,276 52,278"/>
-        <path d="M152,286 Q100,296 62,308"/>
-        <path d="M248,266 Q300,254 342,244"/>
-        <path d="M250,276 Q304,276 348,278"/>
-        <path d="M248,286 Q300,296 338,308"/>
+        <path d="M158,332 Q200,344 242,332" stroke="#3d434c" stroke-width="4" fill="none" opacity=".6"/>
       </g>
     </svg>
+
+    <!-- ================= R2-D2 ================= -->
+    <svg class="face r2d2" viewBox="0 0 400 390" width="400" height="390" xmlns="http://www.w3.org/2000/svg" aria-label="astromech dome">
+      <defs>
+        <radialGradient id="r2-dome" cx="38%" cy="24%" r="90%">
+          <stop offset="0%" stop-color="#fbfcfe"/>
+          <stop offset="55%" stop-color="#d7dce3"/>
+          <stop offset="100%" stop-color="#9aa2ad"/>
+        </radialGradient>
+        <linearGradient id="r2-body" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#eef1f5"/>
+          <stop offset="100%" stop-color="#c3cad4"/>
+        </linearGradient>
+        <radialGradient id="r2-lens" cx="40%" cy="35%" r="75%">
+          <stop offset="0%" stop-color="#2c333d"/>
+          <stop offset="70%" stop-color="#0b0e13"/>
+          <stop offset="100%" stop-color="#04060a"/>
+        </radialGradient>
+      </defs>
+      <!-- torso hint -->
+      <rect x="72" y="276" width="256" height="86" rx="14" fill="url(#r2-body)" stroke="#9aa2ad" stroke-width="3"/>
+      <rect x="172" y="286" width="56" height="66" rx="6" fill="#2f62b5"/>
+      <rect x="96" y="290" width="44" height="26" rx="4" fill="#aab2bd"/>
+      <rect x="260" y="290" width="44" height="26" rx="4" fill="#aab2bd"/>
+      <!-- dome -->
+      <path d="M62,262 A138,138 0 0 1 338,262 Z" fill="url(#r2-dome)"/>
+      <path d="M96,190 A126,126 0 0 1 304,190" fill="none" stroke="#2f62b5" stroke-width="24"/>
+      <path d="M78,230 A130,130 0 0 1 322,230" fill="none" stroke="#2f62b5" stroke-width="10" opacity=".85"/>
+      <!-- dome seams -->
+      <path d="M116,254 A138,138 0 0 1 148,152" fill="none" stroke="#8f98a3" stroke-width="2" opacity=".6"/>
+      <path d="M284,254 A138,138 0 0 0 252,152" fill="none" stroke="#8f98a3" stroke-width="2" opacity=".6"/>
+      <rect x="54" y="256" width="292" height="18" rx="6" fill="#8f98a3" stroke="#6a7280" stroke-width="2"/>
+      <!-- radar eye -->
+      <circle cx="200" cy="152" r="38" fill="#c9cfd8" stroke="#23272d" stroke-width="4"/>
+      <circle cx="200" cy="152" r="30" fill="#101317"/>
+      <circle cx="200" cy="152" r="21" fill="url(#r2-lens)"/>
+      <g class="lid"><circle class="r2glow" cx="200" cy="152" r="8" fill="#ff453a"/></g>
+      <circle cx="192" cy="143" r="4" fill="#e8f2ff" opacity=".5"/>
+      <!-- holoprojector -->
+      <circle cx="126" cy="224" r="17" fill="#23272d" stroke="#97a0aa" stroke-width="5"/>
+      <circle class="holo" cx="126" cy="224" r="8" fill="#3f8ae0"/>
+      <!-- logic display -->
+      <rect x="230" y="206" width="56" height="30" rx="4" fill="#0a0c10" stroke="#4a515b" stroke-width="2"/>
+      <g>
+        <rect class="blip" x="236" y="212" width="7" height="7" fill="#58a6ff"/>
+        <rect class="blip" x="247" y="212" width="7" height="7" fill="#ff5c57"/>
+        <rect class="blip" x="258" y="212" width="7" height="7" fill="#58a6ff"/>
+        <rect class="blip" x="269" y="212" width="7" height="7" fill="#58a6ff"/>
+        <rect class="blip" x="236" y="223" width="7" height="7" fill="#ff5c57"/>
+        <rect class="blip" x="247" y="223" width="7" height="7" fill="#58a6ff"/>
+        <rect class="blip" x="258" y="223" width="7" height="7" fill="#ffb547"/>
+        <rect class="blip" x="269" y="223" width="7" height="7" fill="#58a6ff"/>
+      </g>
+      <!-- vents under the eye -->
+      <rect x="184" y="214" width="32" height="9" rx="2" fill="#2f62b5"/>
+      <rect x="184" y="228" width="32" height="9" rx="2" fill="#2f62b5"/>
+    </svg>
+
   </div>
   <div class="caption" id="caption"></div>
   <div class="unlock" id="unlock">click or tap once to turn on sound</div>
@@ -208,9 +327,9 @@
 (() => {
   const body = document.body;
   const head = document.getElementById('head');
-  const mouth = document.getElementById('mouth');
   const caption = document.getElementById('caption');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const FACES = ['pepper', 'hal9000', 'terminator', 'r2d2'];
 
   let state = 'offline';
   let captionTimer = null;
@@ -265,17 +384,24 @@
   function setState(next) {
     if (next === state) return;
     state = next;
-    body.className = next;
-    if (next !== 'speaking') mouth.style.setProperty('--open', '0.8vmin');
+    body.className = next;   // className only; data-face persists across states
+    if (next !== 'speaking') {
+      head.style.setProperty('--open', '0.8vmin');
+      head.style.setProperty('--talk', '0');
+    }
     if (next === 'thinking') head.style.setProperty('--dx', '2vmin'), head.style.setProperty('--dy', '-2vmin');
     else if (next === 'listening') head.style.setProperty('--dx', '0'), head.style.setProperty('--dy', '1vmin');
     else head.style.setProperty('--dx', '0'), head.style.setProperty('--dy', '0');
   }
 
+  function setFace(name) {
+    body.dataset.face = FACES.includes(name) ? name : 'pepper';
+  }
+
   function setLevel(level) {
     if (state !== 'speaking') return;
-    const open = 0.8 + level * 7; // vmin
-    mouth.style.setProperty('--open', open.toFixed(2) + 'vmin');
+    head.style.setProperty('--open', (0.8 + level * 7).toFixed(2) + 'vmin');
+    head.style.setProperty('--talk', level.toFixed(3));
   }
 
   function setCaption(text) {
@@ -327,6 +453,7 @@
       const msg = JSON.parse(ev.data);
       if (msg.type === 'flush') flushAudio();
       else if (msg.type === 'state') setState(msg.state);
+      else if (msg.type === 'face') setFace(msg.face);
       else if (msg.type === 'level') setLevel(msg.level);
       else if (msg.type === 'caption' && msg.role === 'bot') setCaption(msg.text);
     };

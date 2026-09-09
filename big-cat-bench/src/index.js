@@ -4,7 +4,7 @@
 //   npm run lights                        (sanity-check HA + see entity ids)
 //   npm start                             (wear headphones — see README)
 import 'dotenv/config';
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { listLights, toolDeclarations, toolHandlers } from './ha.js';
 import { startMic, startCamera, Player } from './media.js';
 import { startFaceServer, pcmLevel } from './face-server.js';
@@ -23,6 +23,42 @@ let botLine = '';          // accumulates output transcription for the caption
 let lastLevelAt = 0;
 let turnAudioBytes = 0, turnAudioChunks = 0;
 
+// ---- face persona tool -------------------------------------------------------
+// The model picks the face to match the topic; the page morphs between them.
+
+const FACES = ['pepper', 'hal9000', 'terminator', 'r2d2'];
+const faceToolDeclarations = [
+  {
+    name: 'set_face',
+    description:
+      'Morph the on-screen robot face to fit the current topic or mood. ' +
+      'pepper: the default friendly robot face — everyday chat and home control. ' +
+      'hal9000: calm red camera eye — space, AI, computers, deadpan moments. ' +
+      'terminator: chrome skull — security, alarms, threats, action movies. ' +
+      'r2d2: astromech dome — Star Wars, gadgets, tinkering, playful moods. ' +
+      'Switch when the topic clearly shifts and return to pepper afterwards.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        face: {
+          type: Type.STRING,
+          format: 'enum',
+          enum: FACES,
+          description: 'Which face to show.',
+        },
+      },
+      required: ['face'],
+    },
+  },
+];
+const faceToolHandlers = {
+  set_face: ({ face: name }) => {
+    if (!FACES.includes(name)) return { error: `unknown face: ${name}` };
+    face.setFace(name);
+    return { face: name };
+  },
+};
+
 let session = null;        // current live session
 let ready = false;         // true once onopen fires
 let resumeHandle = null;   // session-resumption token from the server
@@ -40,9 +76,13 @@ async function buildConfig() {
       'You are a compact, friendly home assistant robot on a desk. You can see ' +
       'through a webcam and hear through a mic. Keep spoken replies short. ' +
       'When asked to control a light, call toggle_light with the exact entity_id. ' +
-      'If the request is ambiguous, ask which light. Known lights (entity_id, name, state):\n' +
+      'If the request is ambiguous, ask which light. ' +
+      'Your face is shown on a display and can morph between personas: call set_face ' +
+      'when the conversation topic clearly fits one (see the tool description), and ' +
+      'call it with "pepper" to return to normal when the topic passes. Do not ' +
+      'announce the face change; just do it. Known lights (entity_id, name, state):\n' +
       lights.map((l) => `- ${l.entity_id} | ${l.name} | ${l.state}`).join('\n'),
-    tools: [{ functionDeclarations: toolDeclarations }],
+    tools: [{ functionDeclarations: [...toolDeclarations, ...faceToolDeclarations] }],
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     // Ask the server for a resumable handle; pass it back on reconnect.
@@ -122,7 +162,7 @@ async function handleMessage(msg) {
     face.state('thinking');
     const functionResponses = [];
     for (const fc of msg.toolCall.functionCalls) {
-      const handler = toolHandlers[fc.name];
+      const handler = toolHandlers[fc.name] ?? faceToolHandlers[fc.name];
       let response;
       try {
         response = handler ? await handler(fc.args ?? {}) : { error: `unknown tool ${fc.name}` };
