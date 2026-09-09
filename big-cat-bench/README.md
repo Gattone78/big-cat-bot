@@ -54,6 +54,11 @@ eye — space/AI), `terminator` (chrome skull — security/action), `r2d2`
 (astromech dome — Star Wars/tinkering). Each persona maps the same states onto
 its own anatomy (HAL's glow breathes, the skull's jaw talks, R2's lights flicker).
 
+The voice follows the face: Leda for pepper, Charon for hal9000, Orus for
+terminator, Puck for r2d2. The Live API fixes the voice per connection, so a
+face switch quietly reconnects at the end of the turn — session resumption
+carries the conversation across, and the face shows "thinking" for the ~1s gap.
+
 Try `npm run face` first to see it cycle through states and faces without any keys.
 
 Later this same page runs in Chromium kiosk mode on the Pi's display:

@@ -27,6 +27,17 @@ let turnAudioBytes = 0, turnAudioChunks = 0;
 // The model picks the face to match the topic; the page morphs between them.
 
 const FACES = ['pepper', 'hal9000', 'terminator', 'r2d2'];
+// Voice is fixed per connection in the Live API, so a face switch that changes
+// voice schedules a reconnect at the end of the turn; session resumption keeps
+// the conversation context across it.
+const FACE_VOICES = {
+  pepper: 'Leda',        // youthful, friendly
+  hal9000: 'Charon',     // calm, even, informative
+  terminator: 'Orus',    // firm, heavy
+  r2d2: 'Puck',          // upbeat, playful
+};
+let currentFace = 'pepper';
+let voiceReconnectPending = false;
 const faceToolDeclarations = [
   {
     name: 'set_face',
@@ -55,7 +66,9 @@ const faceToolHandlers = {
   set_face: ({ face: name }) => {
     if (!FACES.includes(name)) return { error: `unknown face: ${name}` };
     face.setFace(name);
-    return { face: name };
+    if (FACE_VOICES[name] !== FACE_VOICES[currentFace]) voiceReconnectPending = true;
+    currentFace = name;
+    return { face: name, voice: FACE_VOICES[name] };
   },
 };
 
@@ -63,6 +76,7 @@ let session = null;        // current live session
 let ready = false;         // true once onopen fires
 let resumeHandle = null;   // session-resumption token from the server
 let shuttingDown = false;
+let voiceSwitchClose = false; // this close is our own voice switch, not a failure
 
 // ---- session -----------------------------------------------------------------
 
@@ -72,6 +86,9 @@ async function buildConfig() {
 
   return {
     responseModalities: [Modality.AUDIO],
+    speechConfig: {
+      voiceConfig: { prebuiltVoiceConfig: { voiceName: FACE_VOICES[currentFace] } },
+    },
     systemInstruction:
       'You are a compact, friendly home assistant robot on a desk. You can see ' +
       'through a webcam and hear through a mic. Keep spoken replies short. ' +
@@ -106,9 +123,10 @@ async function connect() {
       onerror: (e) => console.error('[live] error:', e.message),
       onclose: (e) => {
         ready = false;
-        face.state('offline');
+        face.state(voiceSwitchClose ? 'thinking' : 'offline');
         console.log(`[live] closed: ${e?.reason || '(no reason)'}`);
-        if (!shuttingDown) setTimeout(connect, 1000);
+        if (!shuttingDown) setTimeout(connect, voiceSwitchClose ? 250 : 1000);
+        voiceSwitchClose = false;
       },
     },
   });
@@ -155,6 +173,14 @@ async function handleMessage(msg) {
       botLine = '';
       face.state('idle');
       process.stdout.write('\n');
+      // A face switch changed the voice: cycle the connection now that the turn
+      // is over. Resumption restores the conversation; buildConfig picks the voice.
+      if (voiceReconnectPending) {
+        voiceReconnectPending = false;
+        voiceSwitchClose = true;
+        console.log(`[live] switching voice -> ${FACE_VOICES[currentFace]} (reconnecting)`);
+        try { session.close(); } catch { /* onclose reconnects either way */ }
+      }
     }
   }
 
