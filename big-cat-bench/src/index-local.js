@@ -270,7 +270,12 @@ function createSpeaker(turn, timings) {
       botLine += (botLine ? ' ' : '') + sentence;
       face.caption('bot', botLine);
       timings.ttsRequestAt ??= performance.now();
-      queue.push({ promise: fetchTts(sentence, turn.ac.signal) });
+      const promise = fetchTts(sentence, turn.ac.signal);
+      // A barge-in aborts the turn and the pump bails without consuming the
+      // rest of the queue; observe every rejection here or the AbortError
+      // becomes an unhandled rejection and kills the process.
+      promise.catch(() => {});
+      queue.push({ promise });
       notify?.();
     },
     async end() { closed = true; notify?.(); await pump; },
