@@ -47,11 +47,12 @@ export async function createVad({
   let lastSpeechAt = 0;
   let chain = Promise.resolve(); // frames must reach the model strictly in order
   let closed = false;
+  let activeThreshold = threshold;
 
   async function processFrame(frame) {
     if (closed) return;
     const r = await fp.process(frame);
-    if (r.probs?.isSpeech >= threshold) lastSpeechAt = performance.now();
+    if (r.probs?.isSpeech >= activeThreshold) lastSpeechAt = performance.now();
     if (r.msg === Message.SpeechStart) onSpeechStart?.();
     else if (r.msg === Message.SpeechEnd) {
       onSpeechEnd?.(r.audio, { vadMs: Math.round(performance.now() - lastSpeechAt) });
@@ -72,5 +73,12 @@ export async function createVad({
       }
     },
     close() { closed = true; fp.pause(); },
+    /** Raise/restore the speech threshold on the fly (echo guard while the
+     *  bot's own audio is playing through open speakers). */
+    setThreshold(t) {
+      activeThreshold = t;
+      fp.options.positiveSpeechThreshold = t;
+      fp.options.negativeSpeechThreshold = Math.max(0.15, t - 0.15);
+    },
   };
 }

@@ -34,6 +34,11 @@ const TTS_VOICE_MODE = process.env.TTS_VOICE_MODE ?? 'predefined'; // 'clone' fo
 const TTS_EXAGGERATION = Number(process.env.TTS_EXAGGERATION ?? 0.5);
 const VAD_SILENCE_MS = Number(process.env.VAD_SILENCE_MS ?? 400);
 const VAD_THRESHOLD = Number(process.env.VAD_THRESHOLD ?? 0.5);
+// Echo guard for open speakers (no AEC on the bench): while the bot's own
+// audio is audible, the VAD needs this much confidence to trigger — speaker
+// bleed stays below it, a direct voice talking over the bot still clears it.
+const VAD_SPEAKING_THRESHOLD = Number(process.env.VAD_SPEAKING_THRESHOLD ?? 0.85);
+const ECHO_TAIL_MS = 800;       // how long after the last audio slice the guard holds
 const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 8);
 const VIDEO_FPS = Number(process.env.VIDEO_FPS ?? 1);
 const MAX_TOOL_HOPS = 4;
@@ -109,6 +114,21 @@ let latestJpeg = null;   // most recent webcam frame
 let latestJpegAt = 0;
 let activeTurn = null;   // { ac: AbortController }
 let shuttingDown = false;
+let audioActiveUntil = 0;        // wall-clock ms: bot audio audible until then
+let utteranceDuringBotAudio = false;
+const spokenLog = [];            // recent bot sentences, for self-echo detection
+
+const botAudible = () => Date.now() < audioActiveUntil;
+
+/** True when a transcript is mostly words the bot itself just spoke. */
+function looksLikeEcho(text) {
+  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean);
+  const words = norm(text);
+  if (words.length < 3) return false;
+  const spoken = new Set(norm(spokenLog.join(' ')));
+  const hits = words.filter((w) => spoken.has(w)).length;
+  return hits / words.length >= 0.8;
+}
 
 // ---- STT ---------------------------------------------------------------------
 
@@ -221,11 +241,16 @@ function createSpeaker(turn, timings) {
     for (let off = 0; off < pcm.length; off += SLICE_BYTES) {
       if (turn.ac.signal.aborted) return;
       const slice = pcm.subarray(off, Math.min(off + SLICE_BYTES, pcm.length));
-      if (!timings.ttsFirstAudio) { timings.ttsFirstAudio = performance.now(); face.state('speaking'); }
+      if (!timings.ttsFirstAudio) {
+        timings.ttsFirstAudio = performance.now();
+        face.state('speaking');
+        vad.setThreshold(VAD_SPEAKING_THRESHOLD); // echo guard while we're audible
+      }
       face.audio(slice);
       face.level(pcmLevel(slice));
       const now = Date.now();
       playClock = Math.max(playClock, now) + (slice.length / 2 / FACE_RATE) * 1000;
+      audioActiveUntil = playClock + ECHO_TAIL_MS;
       const wait = playClock - now - LEAD_MS;
       if (wait > 0) await abortableSleep(wait);
     }
@@ -273,6 +298,8 @@ function createSpeaker(turn, timings) {
       if (turn.ac.signal.aborted || !/\p{L}|\p{N}/u.test(sentence)) return;
       botLine += (botLine ? ' ' : '') + sentence;
       face.caption('bot', botLine);
+      spokenLog.push(sentence);
+      while (spokenLog.length > 24) spokenLog.shift();
       timings.ttsRequestAt ??= performance.now();
       const promise = fetchTts(sentence, turn.ac.signal);
       // A barge-in aborts the turn and the pump bails without consuming the
@@ -295,10 +322,13 @@ function abortTurn() {
 }
 
 function onSpeechStart() {
+  utteranceDuringBotAudio = botAudible(); // remember for the echo filter
   if (activeTurn) {       // barge-in: kill LLM + TTS in flight, silence the face
     abortTurn();
     face.flush();
+    audioActiveUntil = 0;
   }
+  vad.setThreshold(VAD_THRESHOLD); // capture the rest of the utterance normally
   face.state('listening');
 }
 
@@ -320,6 +350,10 @@ async function onSpeechEnd(audioF32, { vadMs }) {
   timings.sttDone = performance.now();
   const clean = (text ?? '').trim();
   if (clean.length < 2 || /^[\p{P}\s]+$/u.test(clean)) return finishTurn(turn); // noise / empty
+  if (utteranceDuringBotAudio && looksLikeEcho(clean)) {
+    console.log(`[echo] ignored own voice: ${clean}`);
+    return finishTurn(turn);
+  }
   console.log(`You: ${clean}`);
 
   const userContent = [{ type: 'text', text: clean }];
@@ -391,6 +425,8 @@ function finishTurn(turn) {
   if (activeTurn === turn) {
     activeTurn = null;
     face.state('idle');
+    // hold the raised threshold until the speaker tail has faded, then relax
+    setTimeout(() => { if (!activeTurn && !botAudible()) vad.setThreshold(VAD_THRESHOLD); }, ECHO_TAIL_MS);
   }
 }
 
