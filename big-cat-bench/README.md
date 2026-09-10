@@ -42,8 +42,11 @@ in Phase 2.
 | `src/face-demo.js` | `npm run face` — preview the face with fake states, no keys needed |
 | `face/index.html` | the face itself; open in any browser on the LAN |
 
-In Phase 2 `media.js` moves to the Pi ("body") and the brain files + `ha.js` stay
-on the Proxmox VM ("brain"); the split is already along that seam.
+In Phase 2 the body moves off this machine along that seam: the ESP32 satellite
+([`../satellite/`](../satellite/README.md)) replaces `media.js`'s mic and the
+browser face with a mic + speaker + LCD + pan servo over the same face
+WebSocket. Set `MIC_SOURCE=satellite` and `VIDEO_DEVICE=none` in `.env` and
+either brain uses it unchanged; the model also gets a `move_head` tool.
 
 ## The face
 

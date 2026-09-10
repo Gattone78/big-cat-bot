@@ -8,6 +8,7 @@ homelab GPU. Talk over it and it stops; ask what it sees and it looks.
 |---|---|
 | [`big-cat-bench/`](big-cat-bench/README.md) | the robot: mic/camera capture, the face, Home Assistant tools, and two interchangeable brains — Gemini Live API (`npm start`) or fully local (`npm run local`) |
 | [`deploy/`](deploy/README.md) | the local brain's GPU services as a `nerdctl compose` stack: vLLM (Qwen3.6 MoE), faster-whisper STT, Chatterbox-Turbo TTS — plus scripts to power the stack and the VM on/off from the workstation |
+| [`satellite/`](satellite/README.md) | the portable body: ESP32-S3 firmware for a mic + speaker + LCD-face + pan-servo unit you can place anywhere in the house; it talks to the brain over the face WebSocket |
 
 The local pipeline is mic → Silero VAD (in-process) → whisper STT → streaming
 LLM with tool calls → per-sentence TTS → browser face, with barge-in

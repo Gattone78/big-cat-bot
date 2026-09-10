@@ -11,6 +11,11 @@ import { startFaceServer, pcmLevel } from './face-server.js';
 
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-live-preview';
 const VIDEO_FPS = Number(process.env.VIDEO_FPS ?? 1);
+// 'ffmpeg' = mic on this machine (the bench); 'satellite' = 16 kHz PCM pushed
+// over the face WebSocket by the ESP32 satellite (see satellite/README.md).
+const MIC_SOURCE = process.env.MIC_SOURCE ?? 'ffmpeg';
+// The satellite has no camera; VIDEO_DEVICE=none runs the brain vision-free.
+const CAMERA_OFF = (process.env.VIDEO_DEVICE ?? '').toLowerCase() === 'none';
 
 if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY must be set in .env');
 
@@ -61,7 +66,27 @@ const faceToolDeclarations = [
       required: ['face'],
     },
   },
+  {
+    name: 'move_head',
+    description:
+      'Turn your head (a pan servo on the satellite body) to face a direction. ' +
+      'Use it when asked to look somewhere, to face the person talking to you, ' +
+      'or for emphasis. Return to center when done.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        direction: {
+          type: Type.STRING,
+          format: 'enum',
+          enum: ['left', 'slightly-left', 'center', 'slightly-right', 'right'],
+          description: 'Where to turn, from your point of view.',
+        },
+      },
+      required: ['direction'],
+    },
+  },
 ];
+const HEAD_POSITIONS = { left: -1, 'slightly-left': -0.5, center: 0, 'slightly-right': 0.5, right: 1 };
 const faceToolHandlers = {
   set_face: ({ face: name }) => {
     if (!FACES.includes(name)) return { error: `unknown face: ${name}` };
@@ -69,6 +94,12 @@ const faceToolHandlers = {
     if (FACE_VOICES[name] !== FACE_VOICES[currentFace]) voiceReconnectPending = true;
     currentFace = name;
     return { face: name, voice: FACE_VOICES[name] };
+  },
+  move_head: ({ direction }) => {
+    const pos = HEAD_POSITIONS[direction];
+    if (pos === undefined) return { error: `unknown direction: ${direction}` };
+    face.servo(pos);
+    return { direction };
   },
 };
 
@@ -90,8 +121,12 @@ async function buildConfig() {
       voiceConfig: { prebuiltVoiceConfig: { voiceName: FACE_VOICES[currentFace] } },
     },
     systemInstruction:
-      'You are a compact, friendly home assistant robot on a desk. You can see ' +
-      'through a webcam and hear through a mic. Keep spoken replies short. ' +
+      'You are a compact, friendly home assistant robot on a desk. ' +
+      (CAMERA_OFF
+        ? 'You can hear through a mic but have no camera. '
+        : 'You can see through a webcam and hear through a mic. ') +
+      'You have a head that can turn: call move_head to look toward a direction ' +
+      'when asked or when it fits the moment. Keep spoken replies short. ' +
       'When asked to control a light, call toggle_light with the exact entity_id. ' +
       'If the request is ambiguous, ask which light. ' +
       'Your face is shown on a display and can morph between personas: call set_face ' +
@@ -204,14 +239,21 @@ async function handleMessage(msg) {
 
 // ---- media -------------------------------------------------------------------
 
-const stopMic = startMic((chunk) => {
+const onMicChunk = (chunk) => {
   if (!ready) return;
   session.sendRealtimeInput({
     audio: { data: chunk.toString('base64'), mimeType: 'audio/pcm;rate=16000' },
   });
-});
+};
+let stopMic = () => {};
+if (MIC_SOURCE === 'satellite') {
+  face.onMic(onMicChunk);
+  console.log('[audio] mic source: satellite (waiting for it to connect to the face port)');
+} else {
+  stopMic = startMic(onMicChunk);
+}
 
-const stopCam = startCamera((jpeg) => {
+const stopCam = CAMERA_OFF ? () => {} : startCamera((jpeg) => {
   if (!ready) return;
   session.sendRealtimeInput({
     video: { data: jpeg.toString('base64'), mimeType: 'image/jpeg' },
@@ -235,4 +277,5 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 await connect();
+face.servo(0); // head to center on startup
 console.log('[bench] talking. Try: "what do you see?" or "turn off the hall bathroom light".');
