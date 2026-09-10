@@ -1,0 +1,134 @@
+# big-cat-bot voice stack — runs on gpu-vm as plain containers via
+#   sudo nerdctl compose up -d
+# so the whole voice pipeline works with only this VM powered on (no k8s).
+#
+# Ports (host): vLLM 8000, STT 8001, TTS 8002 (optional kokoro fallback 8003).
+# GPU budget (96 GB): vLLM ~58 GB (0.6), STT ~2 GB, Chatterbox-Turbo ~4-6 GB.
+#
+# !! If the Kubernetes cluster is up, scale its vLLM to 0 first — both stacks
+# !! would otherwise claim the GPU:  kubectl -n ai scale deploy/vllm --replicas=0
+name: big-cat
+
+services:
+  vllm:
+    # cu130 nightly is required for Blackwell (sm_120) support.
+    image: vllm/vllm-openai:cu130-nightly
+    command:
+      - "--model=Qwen/Qwen3.6-35B-A3B-FP8"
+      - "--max-model-len=16384"
+      - "--gpu-memory-utilization=0.6"
+      - "--reasoning-parser=qwen3"
+      - '--default-chat-template-kwargs={"enable_thinking": false}'
+      - "--enable-auto-tool-choice"
+      # If this build rejects qwen3_coder, pick the Qwen3 parser from
+      # `vllm serve --help` (e.g. hermes for the Qwen3-VL fallback model).
+      - "--tool-call-parser=qwen3_coder"
+      - "--limit-mm-per-prompt.video=0"
+      - '--speculative-config={"method": "mtp", "num_speculative_tokens": 1}'
+      # No --enable-prefix-caching: experimental for this architecture.
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    ports:
+      - "8000:8000"
+    shm_size: 8g
+    volumes:
+      # Set HF_CACHE_DIR in deploy/.env to an existing HF cache directory on the
+      # VM (absolute path) to reuse it; the default is a named volume.
+      - ${HF_CACHE_DIR:-vllm-hf-cache}:/root/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30m   # first start downloads ~35 GB of weights
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  stt:
+    # speaches = faster-whisper server, OpenAI-compatible /v1/audio/transcriptions.
+    # The model (Systran/faster-whisper-large-v3-turbo, ~1.6 GB) is pulled on
+    # first request and kept in the named cache volume.
+    image: ghcr.io/speaches-ai/speaches:latest-cuda
+    ports:
+      - "8001:8000"
+    volumes:
+      - stt-hf-cache:/home/ubuntu/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  tts:
+    # Chatterbox-TTS-Server (Chatterbox-Turbo). No published image exists, so it
+    # is built locally from deploy/tts.Dockerfile (see deploy/README.md).
+    build:
+      context: .
+      dockerfile: tts.Dockerfile
+    image: big-cat/chatterbox-tts:cu128
+    ports:
+      - "8002:8004"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - ./voices:/app/reference_audio   # your reference clips for voice cloning
+      - tts-hf-cache:/app/hf_cache      # model weights (survive restarts)
+      - tts-model-cache:/app/model_cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/api/model-info', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10m   # first start downloads the Chatterbox models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Optional fallback TTS. Not started by default:
+  #   sudo nerdctl compose --profile kokoro up -d tts-kokoro
+  # Brain-side: TTS_URL=http://<vm>:8003  TTS_API=openai  TTS_MODEL=kokoro  TTS_VOICE=af_heart
+  tts-kokoro:
+    profiles: ["kokoro"]
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:latest
+    ports:
+      - "8003:8880"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8880/health', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  vllm-hf-cache:
+  stt-hf-cache:
+  tts-hf-cache:
+  tts-model-cache:

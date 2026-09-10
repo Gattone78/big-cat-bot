@@ -9,12 +9,15 @@
   },
   "scripts": {
     "start": "node src/index.js",
+    "local": "node src/index-local.js",
+    "check-local": "node src/check-local.js",
     "lights": "node src/ha.js",
     "face": "node src/face-demo.js",
     "beep": "node src/beep.js"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
+    "@ricky0123/vad-node": "^0.0.3",
     "dotenv": "^16.4.5",
     "ws": "^8.18.0"
   }

@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.tar.gz
+# personal voice-clone recordings
+deploy/voices/*.wav
+deploy/voices/*.mp3

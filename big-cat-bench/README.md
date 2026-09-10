@@ -31,15 +31,19 @@ in Phase 2.
 
 | file | role |
 |---|---|
-| `src/index.js` | Live session, message loop, tool dispatch, resumption/reconnect |
+| `src/index.js` | Gemini brain: Live session, message loop, tool dispatch, resumption/reconnect |
+| `src/index-local.js` | local brain: VAD → STT → vLLM → TTS against homelab services (`npm run local`) |
+| `src/vad.js` | realtime Silero VAD (ONNX, in-process) over the mic stream |
+| `src/local-util.js` | WAV encoding + streaming sentence splitter for the local brain |
+| `src/check-local.js` | `npm run check-local` — one trivial request to each local service |
 | `src/media.js` | ffmpeg mic + webcam capture, ffplay PCM playback |
-| `src/ha.js` | HA REST client + `toolDeclarations` / `toolHandlers` |
+| `src/ha.js` | HA REST client + tool declarations (Gemini and OpenAI formats) / `toolHandlers` |
 | `src/face-server.js` | serves the face page, broadcasts state/level/captions over WebSocket |
 | `src/face-demo.js` | `npm run face` — preview the face with fake states, no keys needed |
 | `face/index.html` | the face itself; open in any browser on the LAN |
 
-In Phase 2 `media.js` moves to the Pi ("body") and `index.js` + `ha.js` stay on
-the Proxmox VM ("brain"); the split is already along that seam.
+In Phase 2 `media.js` moves to the Pi ("body") and the brain files + `ha.js` stay
+on the Proxmox VM ("brain"); the split is already along that seam.
 
 ## The face
 
@@ -63,6 +67,44 @@ Try `npm run face` first to see it cycle through states and faces without any ke
 
 Later this same page runs in Chromium kiosk mode on the Pi's display:
 `chromium --kiosk --noerrdialogs http://brain.lan:8787`
+
+## Local brain (Phase 1b)
+
+`npm run local` runs the same bot fully locally: mic → Silero VAD (in-process)
+→ faster-whisper (`speaches`) → vLLM (Qwen3.6 MoE) → Chatterbox-Turbo TTS →
+face. The body (`media.js`), face, and HA tools are identical to the Gemini
+brain; audio and images never leave the LAN.
+
+**GPU-VM prerequisites:** the three services in [`../deploy/`](../deploy/README.md)
+running on `gpu-vm` via `nerdctl compose` (that README has the full runbook:
+nerdctl install, build/start order, verification curls, systemd unit, Caddy
+snippets, voice-clip setup, VRAM budget). They run as plain containers so the
+whole voice stack works with only that VM powered on — but if the k8s cluster
+is up, scale its vLLM to 0 first (both would claim the GPU). The brain itself
+is a plain Node process on this machine — no k8s dependency.
+
+**Env vars** (see `.env.example`): `STT_URL`, `STT_MODEL`, `LLM_URL`,
+`LLM_MODEL`, `TTS_URL`, `TTS_API`, `TTS_VOICE`, `TTS_VOICE_MODE`,
+`TTS_EXAGGERATION`, `VAD_SILENCE_MS` (silence that ends a turn, default 400),
+`VAD_THRESHOLD`, `HISTORY_TURNS`, plus the usual `AUDIO_DEVICE` /
+`VIDEO_DEVICE` / `VIDEO_FPS` / `FACE_PORT` / `HA_URL` / `HA_TOKEN`.
+
+**Run order:**
+
+```bash
+npm run check-local      # three [ ok ] lines = GPU-VM side is good
+npm run local
+```
+
+Talking over the bot interrupts it (VAD speech-start aborts the in-flight LLM
+stream and TTS, flushes the face audio). After every turn a latency line prints:
+`[latency] vad=… stt=… llm_first_token=… tts_first_audio=… total=…`.
+
+**Switching brains:** `npm start` = Gemini, `npm run local` = local. Same face,
+same tools, same personas. The local brain speaks with your cloned voice
+(`TTS_VOICE=<clip>.wav`, `TTS_VOICE_MODE=clone` — clips live in
+`deploy/voices/`), and can give personas their own clips via
+`TTS_VOICE_HAL9000=…` etc.
 
 ## Adding a tool (Phase 4)
 

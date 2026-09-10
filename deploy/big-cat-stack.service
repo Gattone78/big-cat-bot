@@ -1,0 +1,20 @@
+# systemd unit: bring the big-cat voice stack up with the VM.
+#   sudo cp big-cat-stack.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now big-cat-stack
+[Unit]
+Description=big-cat-bot voice stack (vLLM + STT + TTS via nerdctl compose)
+Wants=network-online.target
+After=network-online.target containerd.service
+Requires=containerd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/youruser/big-cat/deploy
+ExecStart=/usr/local/bin/nerdctl compose up -d
+ExecStop=/usr/local/bin/nerdctl compose down
+# First boot after an image update can pull for a while
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

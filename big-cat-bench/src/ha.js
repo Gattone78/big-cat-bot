@@ -74,6 +74,31 @@ export const toolHandlers = {
   toggle_light: ({ entity_id }) => toggleLight(entity_id),
 };
 
+// OpenAI function format for the local brain — derived from the Gemini
+// declarations above so there is exactly one source of truth per tool.
+function toJsonSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  const out = { ...schema };
+  if (out.type) out.type = String(out.type).toLowerCase();
+  if (out.format === 'enum') delete out.format; // Gemini-ism; `enum` itself is valid JSON Schema
+  if (out.properties) {
+    out.properties = Object.fromEntries(
+      Object.entries(out.properties).map(([k, v]) => [k, toJsonSchema(v)]),
+    );
+  }
+  if (out.items) out.items = toJsonSchema(out.items);
+  return out;
+}
+
+export const toolDeclarationsOpenAI = toolDeclarations.map((d) => ({
+  type: 'function',
+  function: {
+    name: d.name,
+    description: d.description,
+    parameters: toJsonSchema(d.parameters),
+  },
+}));
+
 // `npm run lights` — quick sanity check that the token works and prints entity ids.
 if (process.argv[1] && process.argv[1].endsWith('ha.js')) {
   const lights = await listLights();
