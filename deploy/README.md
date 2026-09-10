@@ -40,8 +40,9 @@ passwordless nerdctl rule):
 the node is modified beyond nerdctl itself (and, if step 1 needed it, one added
 runtime entry in containerd's config).
 
-Machines: **gpu-vm** = `gpu-vm` (`ssh gpu`, user `youruser`); **workstation**
-= the Windows PC running the brain.
+Machines: **gpu-vm** = the GPU VM (reachable as `ssh gpu`; adjust the VM
+username in paths and `big-cat-stack.service` to yours); **workstation** = the
+Windows PC running the brain.
 
 ---
 
