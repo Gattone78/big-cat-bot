@@ -98,6 +98,8 @@ sudo nerdctl compose build tts                 # builds Chatterbox from tts.Dock
 sudo nerdctl compose up -d stt tts
 sudo nerdctl compose ps
 curl -s http://localhost:8001/v1/models        # speaches answers
+# one-time: install the whisper model into the cache volume (~1.6 GB)
+curl -s -X POST http://localhost:8001/v1/models/deepdml/faster-whisper-large-v3-turbo-ct2
 curl -s http://localhost:8002/api/model-info   # chatterbox answers once the model is loaded
 ```
 

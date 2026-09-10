@@ -17,6 +17,10 @@ services:
       - "--model=Qwen/Qwen3.6-35B-A3B-FP8"
       - "--max-model-len=16384"
       - "--gpu-memory-utilization=0.6"
+      # Qwen3.6 is a hybrid Mamba/attention model: each decode sequence needs a
+      # Mamba cache block, and at 0.6 GPU only ~591 blocks fit — the 1024
+      # default aborts startup. One talking human needs nowhere near that.
+      - "--max-num-seqs=16"
       - "--reasoning-parser=qwen3"
       - '--default-chat-template-kwargs={"enable_thinking": false}'
       - "--enable-auto-tool-choice"
@@ -52,8 +56,8 @@ services:
 
   stt:
     # speaches = faster-whisper server, OpenAI-compatible /v1/audio/transcriptions.
-    # The model (Systran/faster-whisper-large-v3-turbo, ~1.6 GB) is pulled on
-    # first request and kept in the named cache volume.
+    # The model (deepdml/faster-whisper-large-v3-turbo-ct2, ~1.6 GB) must be
+    # installed once — POST /v1/models/<id> — and lives in the cache volume.
     image: ghcr.io/speaches-ai/speaches:latest-cuda
     ports:
       - "8001:8000"

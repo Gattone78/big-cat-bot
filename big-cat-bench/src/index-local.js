@@ -22,7 +22,7 @@ function need(name) {
 const STT_URL = need('STT_URL');
 const LLM_URL = need('LLM_URL');
 const TTS_URL = need('TTS_URL');
-const STT_MODEL = process.env.STT_MODEL ?? 'Systran/faster-whisper-large-v3-turbo';
+const STT_MODEL = process.env.STT_MODEL ?? 'deepdml/faster-whisper-large-v3-turbo-ct2';
 const LLM_MODEL = process.env.LLM_MODEL ?? 'Qwen/Qwen3.6-35B-A3B-FP8';
 // TTS_API 'chatterbox' talks to Chatterbox-TTS-Server's /tts (per-request
 // exaggeration, WAV out); 'openai' talks to /v1/audio/speech with pcm out

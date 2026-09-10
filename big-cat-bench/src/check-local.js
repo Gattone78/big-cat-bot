@@ -6,7 +6,7 @@ import { float32ToWav, parseWav } from './local-util.js';
 const STT_URL = (process.env.STT_URL ?? '').replace(/\/$/, '');
 const LLM_URL = (process.env.LLM_URL ?? '').replace(/\/$/, '');
 const TTS_URL = (process.env.TTS_URL ?? '').replace(/\/$/, '');
-const STT_MODEL = process.env.STT_MODEL ?? 'Systran/faster-whisper-large-v3-turbo';
+const STT_MODEL = process.env.STT_MODEL ?? 'deepdml/faster-whisper-large-v3-turbo-ct2';
 const LLM_MODEL = process.env.LLM_MODEL ?? 'Qwen/Qwen3.6-35B-A3B-FP8';
 const TTS_API = process.env.TTS_API ?? 'chatterbox';
 const TTS_MODEL = process.env.TTS_MODEL ?? 'kokoro';
