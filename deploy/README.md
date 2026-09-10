@@ -25,6 +25,17 @@ reasoning flags removed.
 > kubectl -n ai scale deploy/vllm --replicas=0
 > ```
 
+**Day-to-day on/off** (from the workstation, no manual SSH — uses the
+passwordless nerdctl rule):
+
+```
+.\deploy\stack.ps1 status        # containers + GPU memory
+.\deploy\stack.ps1 down          # stop the stack (VM stays up; reboot restarts it)
+.\deploy\stack.ps1 up            # start it again
+.\deploy\stack.ps1 down vllm     # stop one service (frees its VRAM)
+.\deploy\stack.ps1 logs vllm     # tail logs
+```
+
 **Rollback:** `sudo nerdctl compose down` from `~/big-cat/deploy`. Nothing on
 the node is modified beyond nerdctl itself (and, if step 1 needed it, one added
 runtime entry in containerd's config).
