@@ -4,3 +4,5 @@ node_modules/
 # personal voice-clone recordings
 deploy/voices/*.wav
 deploy/voices/*.mp3
+# Proxmox API credentials for deploy/vm.ps1
+deploy/vm.env

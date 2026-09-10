@@ -36,6 +36,15 @@ passwordless nerdctl rule):
 .\deploy\stack.ps1 logs vllm     # tail logs
 ```
 
+And the VM itself, via the Proxmox API (`vm.ps1` header has the one-time API
+token setup; credentials live in gitignored `deploy/vm.env`):
+
+```
+.\deploy\vm.ps1 status
+.\deploy\vm.ps1 shutdown         # graceful: stack stops via systemd, VM powers off
+.\deploy\vm.ps1 start            # boots VM; stack auto-starts, vLLM ready in ~3-5 min
+```
+
 **Rollback:** `sudo nerdctl compose down` from `~/big-cat/deploy`. Nothing on
 the node is modified beyond nerdctl itself (and, if step 1 needed it, one added
 runtime entry in containerd's config).
