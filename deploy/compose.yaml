@@ -61,6 +61,10 @@ services:
     image: ghcr.io/speaches-ai/speaches:latest-cuda
     ports:
       - "8001:8000"
+    environment:
+      # keep the whisper model resident in VRAM; the default unloads it after
+      # 5 idle minutes, which puts a multi-second reload on the next turn
+      - WHISPER__TTL=-1
     volumes:
       - stt-hf-cache:/home/ubuntu/.cache/huggingface
     restart: unless-stopped
