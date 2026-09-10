@@ -89,6 +89,7 @@ services:
       - "8002:8004"
     environment:
       - HF_TOKEN=${HF_TOKEN}
+      - TTS_BF16=on   # ~40% faster synthesis on bf16-capable GPUs (Blackwell is)
     volumes:
       - ./voices:/app/reference_audio   # your reference clips for voice cloning
       - tts-hf-cache:/app/hf_cache      # model weights (survive restarts)

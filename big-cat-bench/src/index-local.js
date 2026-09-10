@@ -95,7 +95,11 @@ const SYSTEM_PROMPT =
   'call it with "pepper" to return to normal when the topic passes. Do not ' +
   'announce the face change; just do it. ' +
   'Your reply is spoken aloud by a TTS engine: plain conversational text only, ' +
-  'no markdown, no emoji, no lists. Known lights (entity_id, name, state):\n' +
+  'no markdown, no emoji, no lists. Speak only the reply itself — never narrate ' +
+  'what the user said, your reasoning, or your intentions. Only call tools when ' +
+  'the user clearly asks for that action; if they make a filler sound or brief ' +
+  'acknowledgment (mm-hmm, okay, yeah), answer with a short word and no tool ' +
+  'calls. Known lights (entity_id, name, state):\n' +
   lights.map((l) => `- ${l.entity_id} | ${l.name} | ${l.state}`).join('\n');
 
 // ---- state -------------------------------------------------------------------
@@ -331,7 +335,7 @@ async function onSpeechEnd(audioF32, { vadMs }) {
     { role: 'user', content: userContent },
   ];
 
-  const splitter = new SentenceSplitter();
+  const splitter = new SentenceSplitter({ eagerFirst: true });
   const speaker = createSpeaker(turn, timings);
   let fullReply = '';
   const onToken = (tok) => {

@@ -68,15 +68,34 @@ export function resamplePcm16(pcm, fromRate, toRate) {
  */
 export class SentenceSplitter {
   #buf = '';
+  #emitted = false;
+  #eagerFirst;
   // sentence enders (+ closing quotes/brackets) followed by whitespace
   static #BOUNDARY = /([.!?…]+["')”\]]*)\s+/;
+  static #CLAUSE = /([,;:])\s+/;
+
+  /** eagerFirst: emit the FIRST chunk at a clause boundary (>= 24 chars) so
+   *  TTS starts sooner; later chunks wait for full sentence boundaries. */
+  constructor({ eagerFirst = false } = {}) {
+    this.#eagerFirst = eagerFirst;
+  }
 
   push(text) {
     this.#buf += text;
     const out = [];
     for (;;) {
       const m = SentenceSplitter.#BOUNDARY.exec(this.#buf);
+      if (this.#eagerFirst && !this.#emitted) {
+        const c = SentenceSplitter.#CLAUSE.exec(this.#buf);
+        if (c && c.index >= 24 && (!m || c.index < m.index)) {
+          out.push(this.#buf.slice(0, c.index + c[1].length).trim());
+          this.#buf = this.#buf.slice(c.index + c[0].length);
+          this.#emitted = true;
+          continue;
+        }
+      }
       if (m) {
+        this.#emitted = true;
         const sentence = this.#buf.slice(0, m.index + m[1].length).trim();
         this.#buf = this.#buf.slice(m.index + m[0].length);
         if (sentence) out.push(sentence);
