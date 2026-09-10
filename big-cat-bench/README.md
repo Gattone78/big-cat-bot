@@ -1,4 +1,4 @@
-# housebot — Phase 1 bench
+# big-cat-bot — Phase 1 bench
 
 Desk webcam + mic → Gemini Live API → speaker, with one Home Assistant tool
 (`toggle_light`). Proves the whole loop before any Pi hardware arrives.
