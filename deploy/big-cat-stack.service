@@ -3,14 +3,17 @@
 #   sudo systemctl daemon-reload && sudo systemctl enable --now big-cat-stack
 [Unit]
 Description=big-cat-bot voice stack (vLLM + STT + TTS via nerdctl compose)
-Wants=network-online.target
-After=network-online.target containerd.service
+Wants=network-online.target nvidia-cdi-refresh.service
+After=network-online.target containerd.service nvidia-cdi-refresh.service
 Requires=containerd.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/youruser/big-cat/deploy
+# The GPU containers need the driver up and the CDI spec generated; at boot
+# that can lag this unit, so wait for both (up to 2 min) before compose up.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -s /var/run/cdi/nvidia.yaml ] && nvidia-smi -L >/dev/null 2>&1 && exit 0; sleep 2; done; echo "GPU/CDI not ready" >&2; exit 1'
 ExecStart=/usr/local/bin/nerdctl compose up -d
 ExecStop=/usr/local/bin/nerdctl compose down
 # First boot after an image update can pull for a while
