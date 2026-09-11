@@ -130,7 +130,10 @@ npm run local
 ```
 
 Talking over the bot interrupts it (VAD speech-start aborts the in-flight LLM
-stream and TTS, flushes the face audio). After every turn a latency line prints:
+stream and TTS, flushes the face audio). If open speakers make it interrupt
+itself, set `BARGE_IN=off` to ignore the mic entirely while a turn is in
+flight — the bot always finishes, and you speak once it's idle. After every
+turn a latency line prints:
 `[latency] vad=… stt=… llm_first_token=… tts_first_audio=… total=…`.
 
 **Switching brains:** `npm start` = Gemini, `npm run local` = local. Same face,

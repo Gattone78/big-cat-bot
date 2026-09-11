@@ -39,6 +39,11 @@ const VAD_THRESHOLD = Number(process.env.VAD_THRESHOLD ?? 0.5);
 // open speakers work without headphones (the page plays the bot's voice, so
 // its AEC can subtract it).
 const MIC_SOURCE = process.env.MIC_SOURCE ?? 'ffmpeg';
+// BARGE_IN=off disables interruption entirely: anything the mic hears while a
+// turn is in flight (thinking or speaking, plus the speaker tail) is dropped,
+// so the bot can never cut itself off — but you must wait for idle to talk.
+// A blunt, temporary alternative to real echo cancellation (MIC_SOURCE=face).
+const BARGE_IN = (process.env.BARGE_IN ?? 'on') !== 'off';
 // Echo guard for open speakers on the ffmpeg mic (no AEC there): while the
 // bot's own audio is audible, the VAD needs this much confidence to trigger —
 // speaker bleed stays below it, a direct voice talking over the bot still
@@ -330,8 +335,12 @@ function abortTurn() {
   activeTurn = null;
 }
 
+let discardUtterance = false;    // BARGE_IN=off: this utterance is being ignored
+
 function onSpeechStart() {
   utteranceDuringBotAudio = botAudible(); // remember for the echo filter
+  discardUtterance = !BARGE_IN && (activeTurn !== null || botAudible());
+  if (discardUtterance) return;   // barge-in off: let the bot finish, drop this
   if (activeTurn) {       // barge-in: kill LLM + TTS in flight, silence the face
     abortTurn();
     face.flush();
@@ -342,6 +351,11 @@ function onSpeechStart() {
 }
 
 async function onSpeechEnd(audioF32, { vadMs }) {
+  if (discardUtterance) {
+    discardUtterance = false;
+    console.log('[barge-in off] ignored speech during the bot\'s turn');
+    return;
+  }
   abortTurn();
   const turn = { ac: new AbortController() };
   activeTurn = turn;
