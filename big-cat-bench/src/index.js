@@ -2,7 +2,7 @@
 //
 //   npm install && cp .env.example .env   (fill in keys)
 //   npm run lights                        (sanity-check HA + see entity ids)
-//   npm start                             (wear headphones — see README)
+//   npm start                             (headphones, or MIC_SOURCE=face — see README)
 import 'dotenv/config';
 import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { listLights, toolDeclarations, toolHandlers } from './ha.js';
@@ -204,12 +204,18 @@ async function handleMessage(msg) {
 
 // ---- media -------------------------------------------------------------------
 
-const stopMic = startMic((chunk) => {
+// MIC_SOURCE=face captures the mic in the face page with the browser's echo
+// cancellation (open speakers, no headphones); 'ffmpeg' (default) captures
+// the OS device with no AEC.
+const MIC_SOURCE = process.env.MIC_SOURCE ?? 'ffmpeg';
+const onMicChunk = (chunk) => {
   if (!ready) return;
   session.sendRealtimeInput({
     audio: { data: chunk.toString('base64'), mimeType: 'audio/pcm;rate=16000' },
   });
-});
+};
+const stopMic = MIC_SOURCE === 'face' ? face.mic(onMicChunk) : startMic(onMicChunk);
+if (MIC_SOURCE === 'face') console.log('[audio] mic comes from the face page (browser AEC) — open it and click once');
 
 const stopCam = startCamera((jpeg) => {
   if (!ready) return;

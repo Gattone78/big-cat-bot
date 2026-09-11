@@ -34,10 +34,19 @@ const TTS_VOICE_MODE = process.env.TTS_VOICE_MODE ?? 'predefined'; // 'clone' fo
 const TTS_EXAGGERATION = Number(process.env.TTS_EXAGGERATION ?? 0.5);
 const VAD_SILENCE_MS = Number(process.env.VAD_SILENCE_MS ?? 400);
 const VAD_THRESHOLD = Number(process.env.VAD_THRESHOLD ?? 0.5);
-// Echo guard for open speakers (no AEC on the bench): while the bot's own
-// audio is audible, the VAD needs this much confidence to trigger — speaker
-// bleed stays below it, a direct voice talking over the bot still clears it.
-const VAD_SPEAKING_THRESHOLD = Number(process.env.VAD_SPEAKING_THRESHOLD ?? 0.85);
+// Where the mic comes from: 'ffmpeg' captures the OS device (media.js);
+// 'face' captures in the face page with the browser's echo cancellation, so
+// open speakers work without headphones (the page plays the bot's voice, so
+// its AEC can subtract it).
+const MIC_SOURCE = process.env.MIC_SOURCE ?? 'ffmpeg';
+// Echo guard for open speakers on the ffmpeg mic (no AEC there): while the
+// bot's own audio is audible, the VAD needs this much confidence to trigger —
+// speaker bleed stays below it, a direct voice talking over the bot still
+// clears it. The face mic is already echo-cancelled, so it keeps the normal
+// threshold and barge-in stays at full sensitivity.
+const VAD_SPEAKING_THRESHOLD = MIC_SOURCE === 'face'
+  ? Number(process.env.VAD_THRESHOLD ?? 0.5)
+  : Number(process.env.VAD_SPEAKING_THRESHOLD ?? 0.85);
 const ECHO_TAIL_MS = 800;       // how long after the last audio slice the guard holds
 const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 8);
 const VIDEO_FPS = Number(process.env.VIDEO_FPS ?? 1);
@@ -439,7 +448,10 @@ const vad = await createVad({
   onSpeechEnd: (audio, meta) => { onSpeechEnd(audio, meta).catch((e) => console.error('[turn]', e)); },
 });
 
-const stopMic = startMic((chunk) => vad.feed(chunk));
+const stopMic = MIC_SOURCE === 'face'
+  ? face.mic((chunk) => vad.feed(chunk))
+  : startMic((chunk) => vad.feed(chunk));
+if (MIC_SOURCE === 'face') console.log('[audio] mic comes from the face page (browser AEC) — open it and click once');
 const stopCam = startCamera((jpeg) => { latestJpeg = jpeg; latestJpegAt = Date.now(); }, VIDEO_FPS);
 
 face.state('idle');
