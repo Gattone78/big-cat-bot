@@ -341,18 +341,20 @@
   const statusEl = document.getElementById('status');
   let receivedSec = 0;
   function showStatus() {
-    statusEl.textContent = ctx
-      ? `sound ${ctx.state} · ${receivedSec.toFixed(1)}s received`
-      : `sound off · ${receivedSec.toFixed(1)}s received`;
+    const sound = ctx ? `sound ${ctx.state}` : 'sound off';
+    const mic = micWanted || micState !== 'off' ? ` · mic ${micState}` : '';
+    statusEl.textContent = `${sound} · ${receivedSec.toFixed(1)}s received${mic}`;
   }
 
   function unlockAudio() {
-    if (ctx) return;
-    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-    ctx.resume().then(showStatus);
-    ctx.onstatechange = showStatus;
-    unlockEl.classList.add('hidden');
-    showStatus();
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      ctx.resume().then(showStatus);
+      ctx.onstatechange = showStatus;
+      unlockEl.classList.add('hidden');
+      showStatus();
+    }
+    if (micWanted && !micCtx) startMic(); // same gesture doubles as the mic permission prompt
   }
   ['pointerdown', 'keydown', 'touchstart'].forEach((ev) => addEventListener(ev, unlockAudio, { once: false }));
 
@@ -379,6 +381,80 @@
     for (const s of sources) { try { s.stop(); } catch {} }
     sources = [];
     nextTime = 0;
+  }
+
+  // ---- mic uplink (MIC_SOURCE=face): capture here so the browser's echo
+  // canceller sees the bot's voice (this page plays it) and removes it from
+  // the mic before it ever reaches the brain — open speakers, no headphones.
+  // Needs a secure context for getUserMedia: localhost is fine; over the LAN
+  // serve HTTPS or start Chromium with --unsafely-treat-insecure-origin-as-secure.
+  const MIC_RATE = 16000;              // what the brain's VAD/STT expect
+  let micWanted = false;               // the brain asked for the page mic
+  let micCtx = null, micStream = null, micState = 'off';
+
+  const MIC_WORKLET = `
+    class MicSender extends AudioWorkletProcessor {
+      constructor() { super(); this.buf = new Int16Array(1024); this.n = 0; }
+      process(inputs) {
+        const ch = inputs[0] && inputs[0][0];
+        if (ch) for (let i = 0; i < ch.length; i++) {
+          const s = Math.max(-1, Math.min(1, ch[i]));
+          this.buf[this.n++] = s < 0 ? s * 32768 : s * 32767;
+          if (this.n === this.buf.length) {
+            this.port.postMessage(this.buf.slice(0));
+            this.n = 0;
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor('mic-sender', MicSender);`;
+
+  function micStatus(s) { micState = s; showStatus(); }
+
+  async function startMic() {
+    if (micCtx || !micWanted) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      micStatus('unavailable — open via localhost or https');
+      return;
+    }
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,   // the whole point: cancels this page's own playback
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      // A dedicated context at 16 kHz makes the browser do the resampling;
+      // if it refuses that rate, capture at its default and announce it —
+      // the brain resamples whatever rate we report.
+      try { micCtx = new AudioContext({ sampleRate: MIC_RATE }); }
+      catch { micCtx = new AudioContext(); }
+      const url = URL.createObjectURL(new Blob([MIC_WORKLET], { type: 'text/javascript' }));
+      await micCtx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      const node = new AudioWorkletNode(micCtx, 'mic-sender', { numberOfInputs: 1, numberOfOutputs: 0 });
+      node.port.onmessage = (e) => { if (ws?.readyState === 1) ws.send(e.data.buffer); };
+      micCtx.createMediaStreamSource(micStream).connect(node);
+      announceMic();
+      micStatus(`on @ ${micCtx.sampleRate} Hz`);
+    } catch (e) {
+      stopMic();
+      micStatus(`error: ${e.name || e.message}`);
+    }
+  }
+
+  function stopMic() {
+    micStream?.getTracks().forEach((t) => t.stop());
+    micCtx?.close().catch(() => {});
+    micStream = null; micCtx = null;
+    micStatus('off');
+  }
+
+  function announceMic() {
+    if (micCtx && ws?.readyState === 1) ws.send(JSON.stringify({ type: 'mic-start', rate: micCtx.sampleRate }));
   }
 
   function setState(next) {
@@ -443,10 +519,11 @@
   }
 
   // ---- transport ---------------------------------------------------------------
+  let ws = null;
   function connect() {
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
     ws.binaryType = 'arraybuffer';
-    ws.onopen = () => setState('idle');
+    ws.onopen = () => { setState('idle'); announceMic(); }; // reclaim the mic after a reconnect
     ws.onclose = () => { setState('offline'); setTimeout(connect, 1500); };
     ws.onmessage = (ev) => {
       if (ev.data instanceof ArrayBuffer) { playPcm(ev.data); return; }
@@ -456,6 +533,14 @@
       else if (msg.type === 'face') setFace(msg.face);
       else if (msg.type === 'level') setLevel(msg.level);
       else if (msg.type === 'caption' && msg.role === 'bot') setCaption(msg.text);
+      else if (msg.type === 'mic') {
+        micWanted = !!msg.enabled;
+        if (!micWanted) stopMic();
+        else if (micCtx) announceMic();       // already capturing: re-announce on this socket
+        else if (ctx) startMic();             // page already unlocked by a click
+        else unlockEl.textContent = 'click or tap once to turn on sound + mic';
+        showStatus();
+      }
     };
   }
   connect();

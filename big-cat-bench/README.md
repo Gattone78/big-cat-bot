@@ -23,9 +23,12 @@ npm start
 click once (browsers require a gesture before they'll play audio), and leave it
 open. Set `AUDIO_OUT=ffplay` in `.env` to use ffplay instead.
 
-**Wear headphones.** There's no echo cancellation on the bench, so open speakers
-make the model hear itself and interrupt its own turns. The ReSpeaker fixes this
-in Phase 2.
+**Headphones, or `MIC_SOURCE=face`.** The default ffmpeg mic has no echo
+cancellation, so open speakers make the model hear itself and interrupt its own
+turns — wear headphones. To go headphone-free, set `MIC_SOURCE=face` in `.env`:
+the face page then captures the mic itself with the browser's echo canceller,
+which removes the bot's voice because the same page is playing it. See
+[No headphones](#no-headphones-mic_sourceface) below.
 
 ## Layout
 
@@ -68,6 +71,35 @@ Try `npm run face` first to see it cycle through states and faces without any ke
 Later this same page runs in Chromium kiosk mode on the Pi's display:
 `chromium --kiosk --noerrdialogs http://brain.lan:8787`
 
+## No headphones (`MIC_SOURCE=face`)
+
+Set `MIC_SOURCE=face` in `.env` and the face page becomes the microphone too:
+it captures with `getUserMedia({ echoCancellation: true })` and streams PCM
+back to the brain over the same WebSocket that carries the bot's voice out.
+Because the page that *plays* the bot is the page that *listens*, the
+browser's echo canceller subtracts the bot's own audio from the mic — open
+speakers work, barge-in stays at full sensitivity (the raised
+`VAD_SPEAKING_THRESHOLD` echo guard is skipped), and headphones are optional.
+Works with both brains (`npm start` and `npm run local`).
+
+Two things to know:
+
+- **Mic permission needs a secure context.** `http://localhost:8787` on the
+  brain machine just works. Opening the face from another device over plain
+  HTTP does not get a mic — either serve the page via HTTPS (e.g. a Caddy
+  snippet) or launch Chromium with
+  `--unsafely-treat-insecure-origin-as-secure=http://brain.lan:8787`. For the
+  Phase 2 Pi kiosk add `--use-fake-ui-for-media-stream` to auto-grant the
+  mic prompt:
+  `chromium --kiosk --noerrdialogs --use-fake-ui-for-media-stream --unsafely-treat-insecure-origin-as-secure=http://brain.lan:8787 http://brain.lan:8787`
+- **One page is the mic.** Every open face plays audio, but only the most
+  recently connected page that offers a mic feeds the brain (the status
+  corner shows `mic on`). The first click on the page enables sound and
+  mic in one gesture.
+
+The ffmpeg mic (`MIC_SOURCE=ffmpeg`, the default) is unchanged, and a
+ReSpeaker with hardware AEC remains an alternative for Phase 2.
+
 ## Local brain (Phase 1b)
 
 `npm run local` runs the same bot fully locally: mic → Silero VAD (in-process)
@@ -86,8 +118,9 @@ is a plain Node process on this machine — no k8s dependency.
 **Env vars** (see `.env.example`): `STT_URL`, `STT_MODEL`, `LLM_URL`,
 `LLM_MODEL`, `TTS_URL`, `TTS_API`, `TTS_VOICE`, `TTS_VOICE_MODE`,
 `TTS_EXAGGERATION`, `VAD_SILENCE_MS` (silence that ends a turn, default 400),
-`VAD_THRESHOLD`, `HISTORY_TURNS`, plus the usual `AUDIO_DEVICE` /
-`VIDEO_DEVICE` / `VIDEO_FPS` / `FACE_PORT` / `HA_URL` / `HA_TOKEN`.
+`VAD_THRESHOLD`, `HISTORY_TURNS`, plus the usual `MIC_SOURCE` /
+`AUDIO_DEVICE` / `VIDEO_DEVICE` / `VIDEO_FPS` / `FACE_PORT` / `HA_URL` /
+`HA_TOKEN`.
 
 **Run order:**
 
@@ -97,7 +130,10 @@ npm run local
 ```
 
 Talking over the bot interrupts it (VAD speech-start aborts the in-flight LLM
-stream and TTS, flushes the face audio). After every turn a latency line prints:
+stream and TTS, flushes the face audio). If open speakers make it interrupt
+itself, set `BARGE_IN=off` to ignore the mic entirely while a turn is in
+flight — the bot always finishes, and you speak once it's idle. After every
+turn a latency line prints:
 `[latency] vad=… stt=… llm_first_token=… tts_first_audio=… total=…`.
 
 **Switching brains:** `npm start` = Gemini, `npm run local` = local. Same face,
