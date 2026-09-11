@@ -1,10 +1,12 @@
 // Serves face/index.html and pushes state to every connected face over WebSocket.
 // Any browser on the LAN can be the face: laptop now, Pi kiosk or tablet later.
 //
-// The ESP32 satellite (satellite/) speaks the same protocol as the browser face
-// and adds two things: binary frames *from* the client are 16 kHz s16le mic
-// audio (browsers never send binary), and a {type:'servo'} broadcast drives its
-// pan servo. A satellite announces itself with {type:'hello'}.
+// Satellites (satellite/ = ESP32, satellite-pi/ = Raspberry Pi) speak the same
+// protocol as the browser face and add three things: binary frames *from* a
+// client (browsers never send binary) carry a 1-byte type prefix — 0x01 for
+// 16 kHz s16le mic audio, 0x02 for a JPEG camera frame — and a {type:'servo'}
+// broadcast drives the pan servo. A satellite announces itself with
+// {type:'hello'}. Downstream binary stays prefix-free (raw 24 kHz voice PCM).
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -28,14 +30,19 @@ export function startFaceServer(port = Number(process.env.FACE_PORT ?? 8787)) {
   let last = { type: 'state', state: 'idle' };
   let lastFace = null;
   let lastServo = null;
-  let onMic = null; // (Buffer of 16 kHz s16le PCM) — set via the returned handle
+  let onMic = null;   // (Buffer of 16 kHz s16le PCM) — set via the returned handle
+  let onFrame = null; // (Buffer of one JPEG) — set via the returned handle
 
   wss.on('connection', (ws, req) => {
     ws.send(JSON.stringify(last)); // late joiners get the current state
     if (lastFace) ws.send(JSON.stringify(lastFace)); // ...and the current face
     if (lastServo) ws.send(JSON.stringify(lastServo)); // ...and the head position
     ws.on('message', (data, isBinary) => {
-      if (isBinary) { onMic?.(data); return; } // satellite mic audio
+      if (isBinary) {
+        if (data[0] === 0x01) onMic?.(data.subarray(1));
+        else if (data[0] === 0x02) onFrame?.(data.subarray(1));
+        return;
+      }
       try {
         const msg = JSON.parse(data);
         if (msg.type === 'hello') {
@@ -76,6 +83,8 @@ export function startFaceServer(port = Number(process.env.FACE_PORT ?? 8787)) {
     servo: (pos) => broadcast({ type: 'servo', pos: Math.max(-1, Math.min(1, pos)) }),
     /** Receive mic audio (16 kHz s16le PCM Buffers) from a connected satellite. */
     onMic: (cb) => { onMic = cb; },
+    /** Receive camera frames (JPEG Buffers) from a connected satellite. */
+    onFrame: (cb) => { onFrame = cb; },
     clients: () => wss.clients.size,
     close: () => { wss.close(); server.close(); },
   };

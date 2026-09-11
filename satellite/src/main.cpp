@@ -3,9 +3,10 @@
 // all over the face-server WebSocket (see ../big-cat-bench/src/face-server.js).
 //
 // Protocol (client view):
-//   send  binary        16 kHz s16le mono mic PCM (512-sample frames)
+//   send  binary        0x01 + 16 kHz s16le mono mic PCM (512-sample frames)
+//                       (0x02 + JPEG = camera frame, from satellites that have one)
 //   send  {type:hello}  once on connect
-//   recv  binary        24 kHz s16le mono voice PCM
+//   recv  binary        24 kHz s16le mono voice PCM (no prefix)
 //   recv  {type:state|face|caption|servo|flush|level}
 #include <Arduino.h>
 #include <WiFi.h>
@@ -94,9 +95,9 @@ void setup() {
 void loop() {
   ws.loop();
 
-  // mic frames -> brain (only when connected; otherwise let them drop)
-  static uint8_t frame[MIC_FRAME_SAMPLES * 2];
-  while (audioInPop(frame)) {
+  // mic frames -> brain, 0x01-prefixed (only when connected; otherwise drop)
+  static uint8_t frame[1 + MIC_FRAME_SAMPLES * 2] = {0x01};
+  while (audioInPop(frame + 1)) {
     if (wsUp) ws.sendBIN(frame, sizeof(frame));
   }
 

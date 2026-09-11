@@ -14,8 +14,12 @@ const VIDEO_FPS = Number(process.env.VIDEO_FPS ?? 1);
 // 'ffmpeg' = mic on this machine (the bench); 'satellite' = 16 kHz PCM pushed
 // over the face WebSocket by the ESP32 satellite (see satellite/README.md).
 const MIC_SOURCE = process.env.MIC_SOURCE ?? 'ffmpeg';
-// The satellite has no camera; VIDEO_DEVICE=none runs the brain vision-free.
-const CAMERA_OFF = (process.env.VIDEO_DEVICE ?? '').toLowerCase() === 'none';
+// Where camera frames come from: 'ffmpeg' (webcam on this machine, default),
+// 'satellite' (JPEGs pushed over the face WebSocket — the Pi satellite has a
+// camera), or 'none' (vision-free; legacy VIDEO_DEVICE=none means the same).
+const VIDEO_SOURCE = process.env.VIDEO_SOURCE ??
+  ((process.env.VIDEO_DEVICE ?? '').toLowerCase() === 'none' ? 'none' : 'ffmpeg');
+const CAMERA_OFF = VIDEO_SOURCE === 'none';
 
 if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY must be set in .env');
 
@@ -253,12 +257,15 @@ if (MIC_SOURCE === 'satellite') {
   stopMic = startMic(onMicChunk);
 }
 
-const stopCam = CAMERA_OFF ? () => {} : startCamera((jpeg) => {
+const onCamFrame = (jpeg) => {
   if (!ready) return;
   session.sendRealtimeInput({
     video: { data: jpeg.toString('base64'), mimeType: 'image/jpeg' },
   });
-}, VIDEO_FPS);
+};
+let stopCam = () => {};
+if (VIDEO_SOURCE === 'ffmpeg') stopCam = startCamera(onCamFrame, VIDEO_FPS);
+else if (VIDEO_SOURCE === 'satellite') face.onFrame(onCamFrame);
 
 // ---- lifecycle ---------------------------------------------------------------
 

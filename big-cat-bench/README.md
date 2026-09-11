@@ -42,11 +42,13 @@ in Phase 2.
 | `src/face-demo.js` | `npm run face` — preview the face with fake states, no keys needed |
 | `face/index.html` | the face itself; open in any browser on the LAN |
 
-In Phase 2 the body moves off this machine along that seam: the ESP32 satellite
-([`../satellite/`](../satellite/README.md)) replaces `media.js`'s mic and the
-browser face with a mic + speaker + LCD + pan servo over the same face
-WebSocket. Set `MIC_SOURCE=satellite` and `VIDEO_DEVICE=none` in `.env` and
-either brain uses it unchanged; the model also gets a `move_head` tool.
+In Phase 2 the body moves off this machine along that seam, onto a satellite
+speaking the same face WebSocket: the ESP32
+([`../satellite/`](../satellite/README.md), mic + speaker + LCD + pan servo)
+or the Raspberry Pi ([`../satellite-pi/`](../satellite-pi/README.md), adds a
+real camera and a kiosk-mode face on a big screen). Set `MIC_SOURCE=satellite`
+and `VIDEO_SOURCE=satellite|none` in `.env` and either brain uses them
+unchanged; the model also gets a `move_head` tool.
 
 ## The face
 

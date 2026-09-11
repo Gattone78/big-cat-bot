@@ -1,0 +1,18 @@
+# systemd unit for the Pi satellite body.
+#   sudo cp satellite-pi.service /etc/systemd/system/
+#   sudo systemctl edit satellite-pi   # override ExecStart with your brain's IP
+#   sudo systemctl enable --now satellite-pi
+[Unit]
+Description=big-cat-bot Pi satellite (mic/camera/servo client)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/big-cat-bot/satellite-pi/client.py --brain 192.168.1.10
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

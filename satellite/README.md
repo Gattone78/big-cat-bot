@@ -11,6 +11,11 @@ LCD face ◄── state/face/captions/servo ◄──┘
 speaker ◄──── 24 kHz voice PCM ◄──────────┘
 ```
 
+Upstream binary frames carry a 1-byte type prefix (`0x01` mic PCM, `0x02`
+JPEG); this board has no camera, so it only ever sends `0x01`. For a satellite
+with real eyes and a tablet-class screen, see
+[`../satellite-pi/`](../satellite-pi/README.md).
+
 All processing stays on the brain: the satellite is a dumb, cheap terminal.
 Latency budget is unchanged (the Wi-Fi hop adds ~10-20 ms each way).
 
@@ -62,7 +67,7 @@ In `big-cat-bench/.env`:
 
 ```
 MIC_SOURCE=satellite     # mic comes from the satellite, not ffmpeg
-VIDEO_DEVICE=none        # no camera on the satellite
+VIDEO_SOURCE=none        # this satellite has no camera
 ```
 
 then `npm run local` (or `npm start`) as usual. The satellite shows
